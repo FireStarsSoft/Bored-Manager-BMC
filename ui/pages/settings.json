@@ -1,0 +1,155 @@
+{
+  "blocks": [
+    {
+      "type": "section",
+      "title": "What the connected machine can do",
+      "blocks": [
+        {
+          "type": "keyValue",
+          "source": { "kind": "stream", "event": "capabilities" },
+          "rows": [
+            { "key": "ipmitool", "label": "ipmitool" },
+            { "key": "problem", "label": "Problem" }
+          ]
+        },
+        {
+          "type": "conditional",
+          "when": {
+            "source": { "kind": "stream", "event": "capabilities", "path": "problem" },
+            "op": "exists"
+          },
+          "blocks": [
+            {
+              "type": "actions",
+              "actions": [{ "label": "Look again", "method": "sweepNow" }]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "section",
+      "title": "BMC machines",
+      "blocks": [
+        {
+          "type": "table",
+          "source": { "kind": "invoke", "method": "machineRows", "intervalKey": "bmc" },
+          "rowKey": "id",
+          "columns": [
+            { "key": "name", "label": "Name" },
+            { "key": "ip", "label": "BMC address" },
+            { "key": "port", "label": "Port", "format": "number", "align": "right" },
+            { "key": "username", "label": "User" },
+            { "key": "auth", "label": "Credentials" },
+            { "key": "powerLabel", "label": "Power" },
+            { "key": "lastTest", "label": "Last test" },
+            { "key": "problem", "label": "Problem" },
+            { "key": "note", "label": "Notes" }
+          ],
+          "sortDefault": { "key": "name", "dir": "asc" },
+          "filterKeys": ["name", "ip", "username", "note"],
+          "emptyText": "No BMC machines have been saved yet",
+          "rowActions": [
+            {
+              "label": "Test",
+              "method": "machineTest",
+              "argsFromRow": ["id", "revision"]
+            },
+            {
+              "label": "Delete",
+              "method": "machineDelete",
+              "argsFromRow": ["id", "revision"],
+              "kind": "danger",
+              "confirm": "Delete this BMC entry? Its saved credentials are removed."
+            }
+          ],
+          "rowDetail": [
+            {
+              "type": "checkForm",
+              "title": "Edit this machine",
+              "checkMethod": "machineCheck",
+              "applyMethod": "machineApply",
+              "argsFromScope": ["id", "revision"],
+              "applyLabel": "Save it",
+              "fields": [
+                {
+                  "key": "name",
+                  "label": "Name",
+                  "input": "text",
+                  "initialFromScope": "name"
+                },
+                {
+                  "key": "ip",
+                  "label": "BMC address",
+                  "input": "text",
+                  "initialFromScope": "ip",
+                  "help": "IP address or DNS name of the BMC network port, not the OS."
+                },
+                {
+                  "key": "port",
+                  "label": "IPMI port",
+                  "input": "text",
+                  "initialFromScope": "port"
+                },
+                {
+                  "key": "username",
+                  "label": "IPMI user name",
+                  "input": "text",
+                  "initialFromScope": "username"
+                },
+                {
+                  "key": "password",
+                  "label": "IPMI password",
+                  "input": "password",
+                  "help": "Leave blank to keep the current password. Stored as plain text in the app's data folder."
+                },
+                {
+                  "key": "note",
+                  "label": "Notes",
+                  "input": "textarea",
+                  "initialFromScope": "note"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "section",
+      "title": "Add a machine",
+      "blocks": [
+        {
+          "type": "checkForm",
+          "checkMethod": "machineCheck",
+          "applyMethod": "machineApply",
+          "checkLabel": "Check",
+          "applyLabel": "Add machine",
+          "fields": [
+            { "key": "name", "label": "Name", "input": "text" },
+            {
+              "key": "ip",
+              "label": "BMC address",
+              "input": "text",
+              "help": "IP address or DNS name of the BMC network port, not the OS."
+            },
+            {
+              "key": "port",
+              "label": "IPMI port",
+              "input": "text",
+              "initial": "623"
+            },
+            { "key": "username", "label": "IPMI user name", "input": "text" },
+            {
+              "key": "password",
+              "label": "IPMI password",
+              "input": "password",
+              "help": "Stored as plain text in data/user-settings/module-config/bmc.json."
+            },
+            { "key": "note", "label": "Notes", "input": "textarea" }
+          ]
+        }
+      ]
+    }
+  ]
+}

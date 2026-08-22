@@ -1,0 +1,232 @@
+{
+  "blocks": [
+    {
+      "type": "conditional",
+      "when": {
+        "source": { "kind": "stream", "event": "capabilities", "path": "problem" },
+        "op": "exists"
+      },
+      "blocks": [
+        {
+          "type": "section",
+          "title": "ipmitool is missing",
+          "blocks": [
+            {
+              "type": "keyValue",
+              "source": { "kind": "stream", "event": "capabilities" },
+              "rows": [
+                { "key": "ipmitool", "label": "ipmitool" },
+                { "key": "problem", "label": "Problem" }
+              ]
+            },
+            {
+              "type": "actions",
+              "actions": [{ "label": "Look again", "method": "sweepNow" }]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "section",
+      "title": "Machines",
+      "slowTarget": "bmc",
+      "blocks": [
+        {
+          "type": "actions",
+          "actions": [{ "label": "Refresh now", "method": "sweepNow" }]
+        },
+        {
+          "type": "statusCards",
+          "source": { "kind": "stream", "event": "machines", "path": "machines" },
+          "rowKey": "id",
+          "titleKey": "name",
+          "statusKey": "status",
+          "subtitleKey": "powerLabel",
+          "note": { "key": "note", "label": "Notes" },
+          "items": { "key": "chips", "visibleRows": 2 },
+          "columns": { "default": 4, "min": 1, "max": 8 },
+          "emptyText": "No machines yet - add BMC addresses in Module settings",
+          "rowDetail": [
+            {
+              "type": "section",
+              "title": "BMC information",
+              "blocks": [
+                {
+                  "type": "keyValue",
+                  "source": {
+                    "kind": "invoke",
+                    "method": "machineInspect",
+                    "args": ["$row.id", "$row.revision"]
+                  },
+                  "rows": [
+                    { "key": "firmware", "label": "Firmware" },
+                    { "key": "ipmiVersion", "label": "IPMI version" },
+                    { "key": "manufacturer", "label": "Manufacturer" },
+                    { "key": "product", "label": "Product" },
+                    { "key": "serial", "label": "Serial number" },
+                    { "key": "mac", "label": "MAC address" },
+                    { "key": "problem", "label": "Problem" }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "section",
+              "title": "Chassis power",
+              "blocks": [
+                {
+                  "type": "actions",
+                  "actions": [
+                    {
+                      "label": "Power on",
+                      "method": "powerAction",
+                      "argsFromRow": ["id", "revision"],
+                      "args": ["on"],
+                      "confirm": "Power this machine on?"
+                    },
+                    {
+                      "label": "Soft shutdown",
+                      "method": "powerAction",
+                      "argsFromRow": ["id", "revision"],
+                      "args": ["soft"],
+                      "confirm": "Ask the OS to shut down cleanly (ACPI)?"
+                    },
+                    {
+                      "label": "Power off (hard)",
+                      "method": "powerAction",
+                      "argsFromRow": ["id", "revision"],
+                      "args": ["off"],
+                      "kind": "danger",
+                      "confirm": "Cut power immediately? The OS gets no chance to shut down."
+                    },
+                    {
+                      "label": "Power cycle",
+                      "method": "powerAction",
+                      "argsFromRow": ["id", "revision"],
+                      "args": ["cycle"],
+                      "kind": "danger",
+                      "confirm": "Cut power and turn it back on immediately? The OS gets no chance to shut down."
+                    },
+                    {
+                      "label": "Reset",
+                      "method": "powerAction",
+                      "argsFromRow": ["id", "revision"],
+                      "args": ["reset"],
+                      "kind": "danger",
+                      "confirm": "Hard-reset this machine immediately? Unsaved work may be lost."
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "form",
+              "title": "Boot device for next boot",
+              "fields": [
+                {
+                  "key": "device",
+                  "label": "Boot device",
+                  "input": "select",
+                  "initial": "none",
+                  "options": [
+                    { "value": "none", "label": "No override" },
+                    { "value": "pxe", "label": "PXE (network)" },
+                    { "value": "disk", "label": "Hard disk" },
+                    { "value": "cdrom", "label": "CD or DVD" },
+                    { "value": "bios", "label": "BIOS setup" }
+                  ]
+                },
+                {
+                  "key": "persistent",
+                  "label": "Persistent override",
+                  "input": "checkbox",
+                  "initial": false,
+                  "help": "Apply to every future boot instead of only the next one."
+                }
+              ],
+              "submit": {
+                "label": "Set boot device",
+                "method": "bootDevSet",
+                "argsFromRow": ["id", "revision"]
+              }
+            },
+            {
+              "type": "actions",
+              "actions": [
+                {
+                  "label": "Blink UID LED",
+                  "method": "identify",
+                  "argsFromRow": ["id", "revision"],
+                  "prompt": {
+                    "label": "Blink duration in seconds (default 15, maximum 255)",
+                    "input": "number",
+                    "initialKey": "identifySeconds"
+                  }
+                }
+              ]
+            },
+            {
+              "type": "section",
+              "title": "Sensors",
+              "blocks": [
+                {
+                  "type": "table",
+                  "source": {
+                    "kind": "invoke",
+                    "method": "sensorRows",
+                    "args": ["$row.id", "$row.revision"],
+                    "intervalKey": "bmc"
+                  },
+                  "rowKey": "idx",
+                  "columns": [
+                    { "key": "name", "label": "Sensor" },
+                    { "key": "reading", "label": "Reading" },
+                    { "key": "status", "label": "Status" }
+                  ],
+                  "filterKeys": ["name"],
+                  "emptyText": "No readings (is the BMC reachable?)"
+                }
+              ]
+            },
+            {
+              "type": "section",
+              "title": "Event log",
+              "blocks": [
+                {
+                  "type": "table",
+                  "source": {
+                    "kind": "invoke",
+                    "method": "selRows",
+                    "args": ["$row.id", "$row.revision"],
+                    "intervalKey": "bmc"
+                  },
+                  "rowKey": "idx",
+                  "sortDefault": { "key": "seq", "dir": "desc" },
+                  "columns": [
+                    { "key": "when", "label": "When" },
+                    { "key": "sensor", "label": "Sensor" },
+                    { "key": "event", "label": "Event" }
+                  ],
+                  "emptyText": "No event log entries (or the BMC is unreachable)"
+                },
+                {
+                  "type": "actions",
+                  "actions": [
+                    {
+                      "label": "Clear event log",
+                      "method": "selClear",
+                      "args": ["$row.id", "$row.revision"],
+                      "kind": "danger",
+                      "confirm": "Erase every entry in this BMC's system event log?"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

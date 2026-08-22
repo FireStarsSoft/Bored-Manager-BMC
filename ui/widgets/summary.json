@@ -1,0 +1,23 @@
+{
+  "blocks": [
+    {
+      "type": "section",
+      "title": "BMC machines",
+      "blocks": [
+        {
+          "type": "pie",
+          "source": { "kind": "stream", "event": "machines", "path": "counts" },
+          "center": { "key": "total", "label": "Machines" },
+          "emptyText": "No BMC machines configured yet",
+          "slices": [
+            { "key": "on", "label": "Power on", "status": "ok" },
+            { "key": "off", "label": "Power off", "status": "unknown" },
+            { "key": "authFailed", "label": "Auth failed", "status": "warn" },
+            { "key": "unreachable", "label": "Unreachable", "status": "bad" },
+            { "key": "unknown", "label": "Not checked", "status": "unknown" }
+          ]
+        }
+      ]
+    }
+  ]
+}

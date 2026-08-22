@@ -1,0 +1,40 @@
+{
+  "apiVersion": 2,
+  "id": "bmc",
+  "name": "BMC",
+  "version": "1.0.1",
+  "description": "Control server mainboards out-of-band through their BMC using IPMI over LAN: power, sensors, event log, boot device.",
+  "author": "Bored Manager",
+  "minAppVersion": "0.3.2",
+  "defaultEnabled": false,
+  "entries": { "main": "main/index.ts" },
+  "pages": [
+    { "id": "management", "label": "Management", "icon": "Server", "order": 55 },
+    { "id": "settings", "label": "Module settings", "icon": "Settings2", "order": 56 }
+  ],
+  "widgets": [
+    { "id": "summary", "label": "BMC machines", "defaultEnabled": false, "order": 76 }
+  ],
+  "streams": [
+    { "event": "machines", "kind": "latest" },
+    { "event": "series", "kind": "series" },
+    { "event": "capabilities", "kind": "latest" }
+  ],
+  "methods": [
+    "machineRows",
+    "machineCheck",
+    "machineApply",
+    "machineDelete",
+    "machineTest",
+    "machineInspect",
+    "powerAction",
+    "sensorRows",
+    "selRows",
+    "selClear",
+    "bootDevSet",
+    "identify",
+    "sweepNow"
+  ],
+  "fastInterval": "bmc",
+  "slowInterval": "bmc"
+}
