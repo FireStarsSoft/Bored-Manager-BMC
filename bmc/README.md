@@ -2,6 +2,21 @@
 
 Manage server mainboards out of band from Bored Manager through IPMI 2.0 over LAN. The module is vendor-neutral and is intended for boards such as the Supermicro H11DSI and Gigabyte MZ72-HB2.
 
+## Installing
+
+This module is not part of the app download. Install it from **Settings →
+Modules**, by any of:
+
+- **Official list** - pick *BMC* from the list the app ships;
+- **GitHub repo** - `FireStarsSoft/Bored-Manager-BMC`, which installs the
+  latest release;
+- **From file** - the `bmc-<version>.zip` attached to a
+  [release](https://github.com/FireStarsSoft/Bored-Manager-BMC/releases).
+
+It needs Bored Manager **0.3.2** or newer, and installs switched off; enable
+it in the same place. Source, issues and changelog live in
+[FireStarsSoft/Bored-Manager-BMC](https://github.com/FireStarsSoft/Bored-Manager-BMC).
+
 ## What it adds
 
 | Where | What |

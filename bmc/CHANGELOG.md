@@ -2,6 +2,19 @@
 
 Module versions are independent of the app's. Version 1.0.0 requires Bored Manager **0.3.2**.
 
+## 1.0.8
+
+- **The module now lives in its own repository** and is installed rather than
+  shipped: [FireStarsSoft/Bored-Manager-BMC](https://github.com/FireStarsSoft/Bored-Manager-BMC).
+  Bored Manager 0.4.2 is the first release that does not bundle it - get it from
+  Settings → Modules (the official list, `FireStarsSoft/Bored-Manager-BMC`, or the
+  release zip). An install that already has 1.0.7 keeps working untouched
+  across the app update, and updating to 1.0.8 keeps its configured BMCs, credentials and history:
+  nothing about the module's behaviour, manifest ids or stored shapes changed
+  here.
+- README: an Installing section, since the module is no longer in the app
+  download, and a link back to the repository.
+
 ## 1.0.7
 
 - README: the Management page's new "Fleet power over time" chart is in the

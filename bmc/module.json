@@ -2,7 +2,7 @@
   "apiVersion": 2,
   "id": "bmc",
   "name": "BMC",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Control server mainboards out-of-band through their BMC using IPMI over LAN: power, sensors, event log, boot device.",
   "author": "Bored Manager",
   "minAppVersion": "0.3.2",

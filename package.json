@@ -1,0 +1,25 @@
+{
+  "name": "bored-manager-bmc",
+  "description": "BMC module for Bored Manager - out-of-band server control over IPMI: power, sensors, event log and boot device",
+  "type": "module",
+  "private": true,
+  "license": "Apache-2.0",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "specs": "tsx scripts/check-specs.mjs",
+    "compile": "tsx scripts/compile-module.mjs",
+    "pack": "node scripts/package-module.mjs bmc dist",
+    "sdk:check": "node scripts/sync-sdk.mjs --check",
+    "sdk:sync": "node scripts/sync-sdk.mjs",
+    "sdk:drift": "node scripts/sync-sdk.mjs --against main",
+    "check": "npm run sdk:check && npm run typecheck && npm test && npm run specs && npm run compile"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.0",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.12",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.11"
+  }
+}
