@@ -118,25 +118,47 @@ function normalize(raw: unknown): BmcConfig {
 }
 
 /**
- * Config is shared by every connected-machine instance of this module. Read it
- * afresh so an edit made while viewing one management station is immediately
- * visible to the others and cannot be overwritten from a stale cache.
+ * Config is shared by every connected-machine instance of this module, so the
+ * normalised document is kept only until something writes it - `onConfigChange`
+ * fires for every instance, this one included, so an edit made while viewing
+ * another management station drops this copy rather than being overwritten by
+ * it. Without the cache this parsed and re-validated the whole machine list
+ * several times per sweep and once per 2 s table poll.
+ *
+ * The document handed out is the cache itself: callers read it, and the ones
+ * that change it go through `update()`.
  */
 export class ConfigStore {
-  constructor(private ctx: ModuleContext) {}
+  private cache: BmcConfig | null = null
+  private readonly unsubscribe: () => void
+
+  constructor(private ctx: ModuleContext) {
+    this.unsubscribe = ctx.onConfigChange(() => {
+      this.cache = null
+    })
+  }
 
   read(): BmcConfig {
-    return normalize(this.ctx.configGet())
+    return (this.cache ??= normalize(this.ctx.configGet()))
   }
 
   update<T>(mutate: (config: BmcConfig) => T): T {
     const config = this.read()
     const result = mutate(config)
     this.ctx.configSet(config)
+    // The listener above has just cleared it; this document is what was
+    // written, so it is also what the next read should see.
+    this.cache = config
     return result
   }
 
   reset(): void {
-    // No in-memory document to invalidate.
+    this.cache = null
+  }
+
+  /** Stop listening. The context drops the listener on revoke anyway; this is for a tidy dispose. */
+  dispose(): void {
+    this.unsubscribe()
+    this.cache = null
   }
 }

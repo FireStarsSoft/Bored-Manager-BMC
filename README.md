@@ -6,9 +6,9 @@ Manage server mainboards out of band from Bored Manager through IPMI 2.0 over LA
 
 | Where | What |
 |---|---|
-| Sidebar → BMC → Management | One status card per configured BMC. Open a card to inspect the controller, control chassis power, select a boot device, blink the UID LED, read sensors, and inspect or clear the system event log. |
+| Sidebar → BMC → Management | One status card per configured BMC. Open a card to inspect the controller, control chassis power, select a boot device, blink the UID LED, read sensors, and inspect or clear the system event log. Below the cards, **Fleet power over time** charts the same counts the sweep has been recording all along. |
 | Sidebar → BMC → Module settings | Add, test, edit, and remove BMC addresses and credentials. |
-| Overview cards | An optional donut showing powered-on, powered-off, authentication-failed, unreachable, and not-yet-checked machines. |
+| Overview cards | **BMC machines** (off by default): a donut of powered-on, powered-off, authentication-failed, unreachable, and not-yet-checked machines. |
 | History | `bmc`: powered-on, powered-off, authentication-failed, and unreachable machine counts. |
 
 The module is disabled by default. Enable it in Settings → Modules before using its pages.
@@ -67,9 +67,11 @@ The slow `bmc` interval controls network sweeps. A sweep reads only `chassis pow
 
 The **Refresh now** button performs an immediate capability check and sweep. A successful power action also refreshes that one machine immediately.
 
+The BMC list belongs to the module, not to whichever machine is acting as the management station - connect a second machine with this module enabled and it reaches the *same* endpoints. So the automatic sweep does not run twice against them, only one connected machine's instance runs it: whichever has this module's tab open, or the one that connected first if none does. **Refresh now** always runs, from whichever machine is open.
+
 ## Limitations
 
-- IPMI 2.0 `lanplus` is the only transport in version 1.0.0.
+- IPMI 2.0 `lanplus` is the only transport.
 - Vendor-specific OEM commands are not used.
 - Serial over LAN is intentionally not exposed. A JSON `terminal` block would place credentials in a visible command template; a future implementation needs a safe credential-aware streaming API.
 - Sensor and event-log wording comes from each BMC firmware. The module preserves unrecognised entries instead of guessing vendor-specific semantics.

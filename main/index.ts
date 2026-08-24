@@ -103,11 +103,16 @@ const activate: ModuleActivate = (ctx: ModuleContext) => {
   return {
     applyPollers() {
       const seconds = Math.max(0, ctx.slowIntervalSec(INTERVAL_KEY))
-      const key = `${ctx.connected}|${seconds}`
+      const primary = ctx.isPrimaryInstance
+      const key = `${ctx.connected}|${seconds}|${primary}`
       if (key === applied) return
       applied = key
       sweeper.poller.stop()
-      if (!ctx.connected) return
+      // The sweep reaches BMC endpoints the user configured, not this
+      // instance's own connected machine - only the elected primary runs it
+      // automatically, so two connected machines do not both hammer the same
+      // endpoints. A manual "sweep now" is unaffected.
+      if (!ctx.connected || !primary) return
 
       void refreshCapabilities(true).then(() => {
         if (stopped || !ctx.connected || applied !== key) return
@@ -152,6 +157,7 @@ const activate: ModuleActivate = (ctx: ModuleContext) => {
       sweeper.dispose()
       queries.reset()
       machines.clear()
+      config.dispose()
     }
   }
 }

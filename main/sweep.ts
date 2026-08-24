@@ -1,4 +1,5 @@
 import type { ModuleContext, ModulePoller } from '@shared/modules'
+import type { ValueFormat } from '@shared/module-ui'
 import {
   SWEEP_CONCURRENCY,
   machineFingerprint,
@@ -23,6 +24,9 @@ export interface MachineRuntimeState {
 interface CardChip {
   label: string
   status?: ItemStatus
+  /** Raw value to format, paired with `format` below - see StatusCardsBlock.items. */
+  value?: number
+  format?: ValueFormat
 }
 
 export interface MachineCard {
@@ -62,12 +66,6 @@ export interface SeriesPoint {
 }
 
 const SERIES_WINDOW_MS = 5 * 60 * 1000
-
-function clock(timestamp: number): string {
-  const date = new Date(timestamp)
-  const pad = (value: number): string => String(value).padStart(2, '0')
-  return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
-}
 
 export function describeState(state: MachineRuntimeState | undefined): {
   status: ItemStatus
@@ -119,7 +117,9 @@ export function buildMachinesPayload(
       chips: [
         { label: address },
         { label: presentation.powerLabel, status: presentation.status },
-        { label: state?.lastSeen ? `seen ${clock(state.lastSeen)}` : 'never seen' }
+        state?.lastSeen
+          ? { label: 'seen', value: state.lastSeen, format: 'time' }
+          : { label: 'never seen' }
       ]
     }
   })

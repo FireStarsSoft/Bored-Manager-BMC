@@ -31,6 +31,7 @@
       "type": "section",
       "title": "Machines",
       "slowTarget": "bmc",
+      "slowAt": { "kind": "stream", "event": "machines", "path": "t" },
       "blocks": [
         {
           "type": "actions",
@@ -202,7 +203,7 @@
                     "intervalKey": "bmc"
                   },
                   "rowKey": "idx",
-                  "sortDefault": { "key": "seq", "dir": "desc" },
+                  "sortDefault": { "key": "when", "dir": "desc" },
                   "columns": [
                     { "key": "when", "label": "When" },
                     { "key": "sensor", "label": "Sensor" },
@@ -224,6 +225,30 @@
                 }
               ]
             }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "section",
+      "title": "Fleet power over time",
+      "blocks": [
+        {
+          "type": "chart",
+          "title": "Machines by state",
+          "kind": "area",
+          "source": {
+            "kind": "history",
+            "stream": "bmc",
+            "keys": ["on", "off", "unreachable", "authFailed"],
+            "liveEvent": "series"
+          },
+          "format": "number",
+          "series": [
+            { "key": "on", "label": "Power on" },
+            { "key": "off", "label": "Power off" },
+            { "key": "unreachable", "label": "Unreachable" },
+            { "key": "authFailed", "label": "Auth failed" }
           ]
         }
       ]
