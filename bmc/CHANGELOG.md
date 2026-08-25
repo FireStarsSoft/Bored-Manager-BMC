@@ -1,6 +1,6 @@
 # Changelog
 
-Module versions are independent of the app's. Version 1.0.0 requires Bored Manager **0.3.2**.
+Module versions are independent of the app's. Version 1.0.0 required Bored Manager **0.3.2**; from 1.0.8 the floor is **0.4.0**, for `ctx.onConfigChange` and `ctx.isPrimaryInstance`.
 
 ## 1.0.8
 
@@ -14,6 +14,11 @@ Module versions are independent of the app's. Version 1.0.0 requires Bored Manag
   here.
 - README: an Installing section, since the module is no longer in the app
   download, and a link back to the repository.
+- `minAppVersion` corrected to **0.4.0**. The manifest said `0.3.2`, but the
+  config store calls `ctx.onConfigChange` and the poller reads
+  `ctx.isPrimaryInstance` - both of which the app only provides from 0.4.0.
+  On anything older the install passed the version gate and then threw
+  `ctx.onConfigChange is not a function` during activation.
 
 ## 1.0.7
 
