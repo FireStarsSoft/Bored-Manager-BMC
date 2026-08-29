@@ -2,23 +2,49 @@
   "apiVersion": 2,
   "id": "bmc",
   "name": "BMC",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "Control server mainboards out-of-band through their BMC using IPMI over LAN: power, sensors, event log, boot device.",
   "author": "Bored Manager",
   "minAppVersion": "0.4.0",
   "defaultEnabled": false,
-  "entries": { "main": "main/index.ts" },
+  "entries": {
+    "main": "main/index.ts"
+  },
   "pages": [
-    { "id": "management", "label": "Management", "icon": "Server", "order": 55 },
-    { "id": "settings", "label": "Module settings", "icon": "Settings2", "order": 56 }
+    {
+      "id": "management",
+      "label": "Management",
+      "icon": "Server",
+      "order": 55
+    },
+    {
+      "id": "settings",
+      "label": "Module settings",
+      "icon": "Settings2",
+      "order": 56
+    }
   ],
   "widgets": [
-    { "id": "summary", "label": "BMC machines", "defaultEnabled": false, "order": 76 }
+    {
+      "id": "summary",
+      "label": "BMC machines",
+      "defaultEnabled": false,
+      "order": 76
+    }
   ],
   "streams": [
-    { "event": "machines", "kind": "latest" },
-    { "event": "series", "kind": "series" },
-    { "event": "capabilities", "kind": "latest" }
+    {
+      "event": "machines",
+      "kind": "latest"
+    },
+    {
+      "event": "series",
+      "kind": "series"
+    },
+    {
+      "event": "capabilities",
+      "kind": "latest"
+    }
   ],
   "methods": [
     "machineRows",
@@ -35,6 +61,20 @@
     "identify",
     "sweepNow"
   ],
+  "storage": {
+    "config": {
+      "maxKB": 512
+    },
+    "hostData": {
+      "maxKB": 512
+    },
+    "history": {
+      "streams": [
+        "bmc"
+      ],
+      "maxMB": 32
+    }
+  },
   "fastInterval": "bmc",
   "slowInterval": "bmc"
 }
