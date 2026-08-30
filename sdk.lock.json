@@ -1,7 +1,7 @@
 {
   "version": 1,
   "repo": "FireStarsSoft/Bored-Manager",
-  "ref": "v0.6.0",
+  "ref": "v0.6.1",
   "files": [
     {
       "from": "shared/app-settings.ts",
