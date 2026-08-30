@@ -2,10 +2,10 @@
   "apiVersion": 2,
   "id": "bmc",
   "name": "BMC",
-  "version": "1.0.9",
-  "description": "Control server mainboards out-of-band through their BMC using IPMI over LAN: power, sensors, event log, boot device.",
+  "version": "2.0.0",
+  "description": "Control server mainboards out-of-band through their BMC using IPMI over LAN: fleet sensor health, power, event log and boot device, with credentials kept encrypted.",
   "author": "Bored Manager",
-  "minAppVersion": "0.4.0",
+  "minAppVersion": "0.6.0",
   "defaultEnabled": false,
   "entries": {
     "main": "main/index.ts"
@@ -27,7 +27,7 @@
   "widgets": [
     {
       "id": "summary",
-      "label": "BMC machines",
+      "label": "BMC fleet health",
       "defaultEnabled": false,
       "order": 76
     }
@@ -44,6 +44,14 @@
     {
       "event": "capabilities",
       "kind": "latest"
+    },
+    {
+      "event": "overview",
+      "kind": "latest"
+    },
+    {
+      "event": "ui",
+      "kind": "latest"
     }
   ],
   "methods": [
@@ -52,28 +60,47 @@
     "machineApply",
     "machineDelete",
     "machineTest",
+    "machineEnable",
     "machineInspect",
-    "powerAction",
     "sensorRows",
     "selRows",
+    "attentionRows",
+    "incidentRows",
+    "powerAction",
     "selClear",
+    "powerBulk",
+    "solCommand",
     "bootDevSet",
     "identify",
-    "sweepNow"
+    "sweepNow",
+    "rulesEffective",
+    "rulesCheck",
+    "rulesApply",
+    "rulesReset",
+    "hintsSet"
   ],
   "storage": {
     "config": {
       "maxKB": 512
     },
-    "hostData": {
-      "maxKB": 512
+    "secrets": {
+      "maxEntries": 64
     },
     "history": {
       "streams": [
         "bmc"
       ],
       "maxMB": 32
-    }
+    },
+    "records": [
+      {
+        "id": "incidents",
+        "label": "When each machine changed",
+        "maxMB": 32,
+        "retentionDays": 180,
+        "overflow": "evict-oldest"
+      }
+    ]
   },
   "fastInterval": "bmc",
   "slowInterval": "bmc"

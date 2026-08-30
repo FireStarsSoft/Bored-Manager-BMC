@@ -1,152 +1,387 @@
 {
   "blocks": [
     {
-      "type": "section",
-      "title": "What the connected machine can do",
+      "type": "conditional",
+      "when": {
+        "source": { "kind": "stream", "event": "capabilities", "path": "state" },
+        "op": "eq",
+        "value": "connecting"
+      },
       "blocks": [
         {
-          "type": "keyValue",
-          "source": { "kind": "stream", "event": "capabilities" },
-          "rows": [
-            { "key": "ipmitool", "label": "ipmitool" },
-            { "key": "problem", "label": "Problem" }
+          "type": "note",
+          "title": "Waiting for a machine",
+          "lines": [
+            "This module runs ipmitool on the machine the app is connected to. Connect to one in the sidebar and this page fills in by itself.",
+            "Machines you saved earlier are kept and start being swept again as soon as a connection is back."
           ]
-        },
+        }
+      ],
+      "else": [
         {
           "type": "conditional",
           "when": {
-            "source": { "kind": "stream", "event": "capabilities", "path": "problem" },
-            "op": "exists"
+            "source": { "kind": "stream", "event": "capabilities", "path": "state" },
+            "op": "eq",
+            "value": "blocked"
           },
           "blocks": [
             {
-              "type": "actions",
-              "actions": [{ "label": "Look again", "method": "sweepNow" }]
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "type": "section",
-      "title": "BMC machines",
-      "blocks": [
-        {
-          "type": "table",
-          "source": { "kind": "invoke", "method": "machineRows", "intervalKey": "bmc" },
-          "rowKey": "id",
-          "columns": [
-            { "key": "name", "label": "Name" },
-            { "key": "ip", "label": "BMC address" },
-            { "key": "port", "label": "Port", "format": "number", "align": "right" },
-            { "key": "username", "label": "User" },
-            { "key": "auth", "label": "Credentials" },
-            { "key": "powerLabel", "label": "Power" },
-            { "key": "lastTest", "label": "Last test" },
-            { "key": "problem", "label": "Problem" },
-            { "key": "note", "label": "Notes" }
-          ],
-          "sortDefault": { "key": "name", "dir": "asc" },
-          "filterKeys": ["name", "ip", "username", "note"],
-          "emptyText": "No BMC machines have been saved yet",
-          "rowActions": [
-            {
-              "label": "Test",
-              "method": "machineTest",
-              "argsFromRow": ["id", "revision"]
-            },
-            {
-              "label": "Delete",
-              "method": "machineDelete",
-              "argsFromRow": ["id", "revision"],
-              "kind": "danger",
-              "confirm": "Delete this BMC entry? Its saved credentials are removed."
-            }
-          ],
-          "rowDetail": [
-            {
-              "type": "checkForm",
-              "title": "Edit this machine",
-              "checkMethod": "machineCheck",
-              "applyMethod": "machineApply",
-              "argsFromScope": ["id", "revision"],
-              "applyLabel": "Save it",
-              "fields": [
+              "type": "section",
+              "title": "The connected machine cannot run BMC sweeps",
+              "blocks": [
                 {
-                  "key": "name",
-                  "label": "Name",
-                  "input": "text",
-                  "initialFromScope": "name"
+                  "type": "keyValue",
+                  "source": { "kind": "stream", "event": "capabilities" },
+                  "rows": [
+                    { "key": "stateLabel", "label": "Status" },
+                    { "key": "ipmitool", "label": "ipmitool" },
+                    { "key": "problem", "label": "Problem" }
+                  ]
                 },
                 {
-                  "key": "ip",
-                  "label": "BMC address",
-                  "input": "text",
-                  "initialFromScope": "ip",
-                  "help": "IP address or DNS name of the BMC network port, not the OS."
+                  "type": "note",
+                  "title": "What to do",
+                  "tone": "warning",
+                  "lines": [
+                    "Install ipmitool on the connected machine (apt install ipmitool, or dnf install ipmitool), or connect to a machine that already has it.",
+                    "Your saved machines and credentials are kept, and everything below still works: nothing on this page needs to reach a BMC except the connection test."
+                  ]
                 },
                 {
-                  "key": "port",
-                  "label": "IPMI port",
-                  "input": "text",
-                  "initialFromScope": "port"
-                },
-                {
-                  "key": "username",
-                  "label": "IPMI user name",
-                  "input": "text",
-                  "initialFromScope": "username"
-                },
-                {
-                  "key": "password",
-                  "label": "IPMI password",
-                  "input": "password",
-                  "help": "Leave blank to keep the current password. Stored as plain text in the app's data folder."
-                },
-                {
-                  "key": "note",
-                  "label": "Notes",
-                  "input": "textarea",
-                  "initialFromScope": "note"
+                  "type": "actions",
+                  "actions": [{ "label": "Look again", "method": "sweepNow" }]
                 }
               ]
             }
           ]
-        }
-      ]
-    },
-    {
-      "type": "section",
-      "title": "Add a machine",
-      "blocks": [
+        },
         {
-          "type": "checkForm",
-          "checkMethod": "machineCheck",
-          "applyMethod": "machineApply",
-          "checkLabel": "Check",
-          "applyLabel": "Add machine",
-          "fields": [
-            { "key": "name", "label": "Name", "input": "text" },
+          "type": "subnav",
+          "initial": "machines",
+          "items": [
             {
-              "key": "ip",
-              "label": "BMC address",
-              "input": "text",
-              "help": "IP address or DNS name of the BMC network port, not the OS."
+              "id": "machines",
+              "label": "Machines",
+              "icon": "Server",
+              "blocks": [
+                {
+                  "type": "conditional",
+                  "when": {
+                    "source": { "kind": "stream", "event": "ui", "path": "hintsOn" },
+                    "op": "eq",
+                    "value": true
+                  },
+                  "blocks": [
+                    {
+                      "type": "note",
+                      "title": "Where these passwords are kept",
+                      "lines": [
+                        "In the app's own secret store, encrypted with this install's key. They are not in this module's settings file, they are never sent back to your browser, and they never appear on an ipmitool command line - the password is handed to it on standard input, so it is not in the target's process list either.",
+                        "The credentials column says which ones are saved. A row reading \"enter it again\" means the app's secret key is no longer the one that password was written with - restoring a backup without data/secret.key does that - and the only fix is to type it in once more.",
+                        "Use a dedicated operator-level IPMI account per machine rather than the BMC's administrator account, and keep the management network segment private."
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "section",
+                  "title": "BMC machines",
+                  "blocks": [
+                    {
+                      "type": "table",
+                      "source": { "kind": "invoke", "method": "machineRows", "intervalKey": "bmc" },
+                      "rowKey": "id",
+                      "columns": [
+                        { "key": "name", "label": "Name" },
+                        { "key": "address", "label": "BMC address" },
+                        { "key": "username", "label": "User" },
+                        { "key": "auth", "label": "Credentials" },
+                        { "key": "enabledLabel", "label": "Sweeping" },
+                        { "key": "powerLabel", "label": "Power" },
+                        { "key": "lastTestAt", "label": "Last test", "format": "datetime", "align": "right" },
+                        { "key": "lastTestResult", "label": "Result", "format": "badges", "sortable": false },
+                        { "key": "problem", "label": "Problem" }
+                      ],
+                      "sortDefault": { "key": "name", "dir": "asc" },
+                      "filterKeys": ["name", "address", "username"],
+                      "emptyText": "No BMC machines have been saved yet - add the first one in the form below.",
+                      "rowActions": [
+                        { "label": "Test", "method": "machineTest", "argsFromRow": ["id", "revision"] },
+                        {
+                          "label": "Park or resume",
+                          "method": "machineEnable",
+                          "argsFromRow": ["id", "revision"],
+                          "confirm": "Switch sweeping for this machine on or off? Its credentials are kept either way."
+                        },
+                        {
+                          "label": "Delete",
+                          "method": "machineDelete",
+                          "argsFromRow": ["id", "revision"],
+                          "kind": "danger",
+                          "confirm": "Delete this BMC entry? Its saved credentials are removed with it."
+                        }
+                      ],
+                      "rowDetail": [
+                        {
+                          "type": "checkForm",
+                          "title": "Edit this machine",
+                          "checkMethod": "machineCheck",
+                          "applyMethod": "machineApply",
+                          "argsFromScope": ["id", "revision"],
+                          "checkLabel": "Check it",
+                          "applyLabel": "Save it",
+                          "fields": [
+                            { "key": "name", "label": "Name", "input": "text", "initialFromScope": "name" },
+                            { "key": "ip", "label": "BMC address", "input": "text", "initialFromScope": "ip" },
+                            { "key": "port", "label": "IPMI port", "input": "text", "initialFromScope": "port" },
+                            { "key": "username", "label": "IPMI user name", "input": "text", "initialFromScope": "username" },
+                            {
+                              "key": "password",
+                              "label": "IPMI password (leave blank to keep the current one)",
+                              "input": "password",
+                              "omitOnApply": true
+                            },
+                            { "key": "enabled", "label": "Sweep this machine", "input": "checkbox", "initialFromScope": "enabled" },
+                            { "key": "note", "label": "Notes", "input": "textarea", "initialFromScope": "note" }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "section",
+                  "title": "Add a machine",
+                  "columns": 2,
+                  "blocks": [
+                    {
+                      "type": "checkForm",
+                      "checkMethod": "machineCheck",
+                      "applyMethod": "machineApply",
+                      "checkLabel": "Check it",
+                      "applyLabel": "Add machine",
+                      "fields": [
+                        { "key": "name", "label": "Name", "input": "text", "placeholder": "Compute node 1" },
+                        { "key": "ip", "label": "BMC address", "input": "text", "placeholder": "10.0.0.120" },
+                        { "key": "port", "label": "IPMI port", "input": "text", "initial": "623" },
+                        { "key": "username", "label": "IPMI user name", "input": "text" },
+                        { "key": "password", "label": "IPMI password", "input": "password", "omitOnApply": true },
+                        { "key": "enabled", "label": "Sweep this machine", "input": "checkbox", "initial": true },
+                        { "key": "note", "label": "Notes", "input": "textarea" }
+                      ]
+                    },
+                    {
+                      "type": "conditional",
+                      "when": {
+                        "source": { "kind": "stream", "event": "ui", "path": "hintsOn" },
+                        "op": "eq",
+                        "value": true
+                      },
+                      "blocks": [
+                        {
+                          "type": "note",
+                          "title": "What each field means",
+                          "lines": [
+                            "BMC address - the address of the machine's management port (IPMI, iDRAC, iLO), not the address its operating system answers on.",
+                            "IPMI port - the RMCP+ port, 623 on almost every controller. Leave it alone unless something in front of the BMC has moved it.",
+                            "IPMI user name and password - an account on the BMC itself, not on the operating system. Prefer a dedicated operator-level account over the administrator one. The password goes into the app's encrypted secret store, not into this module's settings file.",
+                            "Sweep this machine - turning this off keeps the entry and its credentials and stops asking it anything, so its card reads as parked rather than as unreachable.",
+                            "Check it tries the credentials against the BMC and reports what answered. Nothing is saved until you then press the save button."
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
             },
             {
-              "key": "port",
-              "label": "IPMI port",
-              "input": "text",
-              "initial": "623"
+              "id": "behaviour",
+              "label": "Behaviour",
+              "icon": "Gauge",
+              "blocks": [
+                {
+                  "type": "section",
+                  "title": "Rules in force",
+                  "blocks": [
+                    {
+                      "type": "keyValue",
+                      "source": { "kind": "invoke", "method": "rulesEffective", "intervalKey": "bmc" },
+                      "rows": [
+                        { "key": "sweepConcurrency", "label": "Machines swept at once", "format": "number" },
+                        { "key": "sensorEverySweeps", "label": "Read sensors every Nth sweep", "format": "number" },
+                        { "key": "selFetchCount", "label": "Event log entries fetched", "format": "number" },
+                        { "key": "identifySeconds", "label": "Identify blink default (seconds)", "format": "number" },
+                        { "key": "sensorNote", "label": "Sensor health" }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "section",
+                  "title": "Change the rules",
+                  "columns": 2,
+                  "blocks": [
+                    {
+                      "type": "checkForm",
+                      "checkMethod": "rulesCheck",
+                      "applyMethod": "rulesApply",
+                      "checkLabel": "Check the values",
+                      "applyLabel": "Save the rules",
+                      "fields": [
+                        {
+                          "key": "sweepConcurrency",
+                          "label": "Machines swept at once (1 to 16)",
+                          "input": "text",
+                          "initialFrom": { "kind": "invoke", "method": "rulesEffective", "path": "sweepConcurrency" }
+                        },
+                        {
+                          "key": "sensorEverySweeps",
+                          "label": "Read sensors every Nth sweep (0 turns sensor health off)",
+                          "input": "text",
+                          "initialFrom": { "kind": "invoke", "method": "rulesEffective", "path": "sensorEverySweeps" }
+                        },
+                        {
+                          "key": "selFetchCount",
+                          "label": "Event log entries fetched (10 to 1000)",
+                          "input": "text",
+                          "initialFrom": { "kind": "invoke", "method": "rulesEffective", "path": "selFetchCount" }
+                        },
+                        {
+                          "key": "identifySeconds",
+                          "label": "Identify blink default in seconds (0 to 255)",
+                          "input": "text",
+                          "initialFrom": { "kind": "invoke", "method": "rulesEffective", "path": "identifySeconds" }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "conditional",
+                      "when": {
+                        "source": { "kind": "stream", "event": "ui", "path": "hintsOn" },
+                        "op": "eq",
+                        "value": true
+                      },
+                      "blocks": [
+                        {
+                          "type": "note",
+                          "title": "What each rule does",
+                          "lines": [
+                            "Leave a field empty to keep what it is now. That is also why these are text boxes rather than spinners: an empty number field arrives as an empty string a spinner cannot tell apart from somebody deliberately typing zero.",
+                            "Machines swept at once - how many BMCs are asked in parallel. Higher finishes a sweep sooner and costs the connected machine more simultaneous ipmitool processes.",
+                            "Read sensors every Nth sweep - power state is read every sweep because it moves; sensors move slowly, so re-reading them less often halves the work without making a fault stale enough to matter. Zero switches sensor health off entirely and machine colour goes back to power state alone.",
+                            "Event log entries fetched - how many of the newest entries a drawer's event log asks for.",
+                            "Identify blink default - the number the Blink UID LED prompt opens with."
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "section",
+                  "title": "Start over",
+                  "blocks": [
+                    {
+                      "type": "actions",
+                      "actions": [
+                        {
+                          "label": "Reset every rule to its default",
+                          "method": "rulesReset",
+                          "kind": "danger",
+                          "confirm": "Put all four rules back to their defaults? Your machines and credentials are untouched."
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "section",
+                  "title": "Display",
+                  "columns": 2,
+                  "blocks": [
+                    {
+                      "type": "form",
+                      "fields": [
+                        {
+                          "key": "hintsOn",
+                          "label": "Show the explanatory notes on this module's pages",
+                          "input": "checkbox",
+                          "initialFrom": { "kind": "stream", "event": "ui", "path": "hintsOn" }
+                        }
+                      ],
+                      "submit": { "label": "Save", "method": "hintsSet" }
+                    },
+                    {
+                      "type": "conditional",
+                      "when": {
+                        "source": { "kind": "stream", "event": "ui", "path": "hintsOn" },
+                        "op": "eq",
+                        "value": true
+                      },
+                      "blocks": [
+                        {
+                          "type": "note",
+                          "title": "This is the switch that hides this panel",
+                          "lines": [
+                            "Every explanatory panel like this one disappears when it is off. Warnings about something being wrong - clear-text passwords, a machine that cannot be swept - stay visible whatever this is set to."
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
             },
-            { "key": "username", "label": "IPMI user name", "input": "text" },
             {
-              "key": "password",
-              "label": "IPMI password",
-              "input": "password",
-              "help": "Stored as plain text in data/user-settings/module-config/bmc.json."
-            },
-            { "key": "note", "label": "Notes", "input": "textarea" }
+              "id": "readiness",
+              "label": "Readiness",
+              "icon": "Info",
+              "blocks": [
+                {
+                  "type": "section",
+                  "title": "The machine you are connected to",
+                  "slowTarget": "bmc",
+                  "slowAt": { "kind": "stream", "event": "capabilities", "path": "t" },
+                  "blocks": [
+                    {
+                      "type": "keyValue",
+                      "source": { "kind": "stream", "event": "capabilities" },
+                      "rows": [
+                        { "key": "stateLabel", "label": "Status" },
+                        { "key": "ipmitool", "label": "ipmitool" },
+                        { "key": "problem", "label": "Problem" },
+                        { "key": "t", "label": "Checked", "format": "time" }
+                      ]
+                    },
+                    {
+                      "type": "actions",
+                      "actions": [{ "label": "Look again", "method": "sweepNow" }]
+                    }
+                  ]
+                },
+                {
+                  "type": "conditional",
+                  "when": {
+                    "source": { "kind": "stream", "event": "ui", "path": "hintsOn" },
+                    "op": "eq",
+                    "value": true
+                  },
+                  "blocks": [
+                    {
+                      "type": "note",
+                      "title": "How this module reaches your BMCs",
+                      "lines": [
+                        "Everything goes through ipmitool on the machine the app is connected to: it speaks IPMI 2.0 over LAN to each BMC you saved, on UDP 623 unless you changed the port.",
+                        "A sweep asks every machine that is switched on for sweeping for its chassis power state, and re-reads its sensors on the slower cadence set under Behaviour. Inspection details and the event log are only read while somebody has a drawer open on them.",
+                        "Only one connected machine sweeps automatically, so two open sessions do not both hammer the same controllers. Pressing Sweep now or Look again always runs here, whichever session that is."
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
           ]
         }
       ]

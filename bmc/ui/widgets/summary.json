@@ -1,20 +1,296 @@
 {
   "blocks": [
     {
-      "type": "section",
-      "title": "BMC machines",
+      "type": "conditional",
+      "when": {
+        "source": {
+          "kind": "stream",
+          "event": "capabilities",
+          "path": "state"
+        },
+        "op": "eq",
+        "value": "connecting"
+      },
       "blocks": [
         {
-          "type": "pie",
-          "source": { "kind": "stream", "event": "machines", "path": "counts" },
-          "center": { "key": "total", "label": "Machines" },
-          "emptyText": "No BMC machines configured yet",
-          "slices": [
-            { "key": "on", "label": "Power on", "status": "ok" },
-            { "key": "off", "label": "Power off", "status": "unknown" },
-            { "key": "authFailed", "label": "Auth failed", "status": "warn" },
-            { "key": "unreachable", "label": "Unreachable", "status": "bad" },
-            { "key": "unknown", "label": "Not checked", "status": "unknown" }
+          "type": "note",
+          "title": "Waiting for a machine",
+          "lines": [
+            "This card fills in as soon as the app is connected to a machine that can run ipmitool against your BMCs."
+          ]
+        }
+      ],
+      "else": [
+        {
+          "type": "conditional",
+          "when": {
+            "source": {
+              "kind": "stream",
+              "event": "capabilities",
+              "path": "state"
+            },
+            "op": "eq",
+            "value": "blocked"
+          },
+          "blocks": [
+            {
+              "type": "note",
+              "title": "No BMC is being read",
+              "tone": "warning",
+              "lines": [
+                "The connected machine cannot run ipmitool, so nothing here would be true. The BMC Module settings page names what is missing and can look again once it is fixed."
+              ]
+            }
+          ],
+          "else": [
+            {
+              "type": "conditional",
+              "when": {
+                "source": {
+                  "kind": "stream",
+                  "event": "capabilities",
+                  "path": "state"
+                },
+                "op": "eq",
+                "value": "checking"
+              },
+              "blocks": [
+                {
+                  "type": "note",
+                  "title": "Looking at the connected machine",
+                  "lines": [
+                    "Checking that ipmitool is there before asking any BMC anything. Any figure shown before that finishes would be one this card invented, so it waits."
+                  ]
+                }
+              ],
+              "else": [
+                {
+                  "type": "conditional",
+                  "when": {
+                    "source": {
+                      "kind": "stream",
+                      "event": "overview",
+                      "path": "counts.monitored"
+                    },
+                    "op": "gt",
+                    "value": 0
+                  },
+                  "blocks": [
+                    {
+                      "type": "section",
+                      "slowTarget": "bmc",
+                      "slowAt": {
+                        "kind": "stream",
+                        "event": "overview",
+                        "path": "t"
+                      },
+                      "blocks": [
+                        {
+                          "type": "keyValue",
+                          "source": {
+                            "kind": "stream",
+                            "event": "overview"
+                          },
+                          "rows": [
+                            {
+                              "key": "label",
+                              "label": "Fleet"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "pie",
+                          "source": {
+                            "kind": "stream",
+                            "event": "overview",
+                            "path": "counts"
+                          },
+                          "emptyText": "Nothing is being swept yet - add a BMC on the Module settings page.",
+                          "slices": [
+                            {
+                              "key": "healthy",
+                              "label": "Nothing wrong",
+                              "status": "ok"
+                            },
+                            {
+                              "key": "warning",
+                              "label": "Needs a look",
+                              "status": "warn"
+                            },
+                            {
+                              "key": "critical",
+                              "label": "Critical",
+                              "status": "bad"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "conditional",
+                          "when": {
+                            "source": {
+                              "kind": "stream",
+                              "event": "overview",
+                              "path": "healthLevel"
+                            },
+                            "op": "gt",
+                            "value": 0
+                          },
+                          "blocks": [
+                            {
+                              "type": "meter",
+                              "label": "Attention level",
+                              "format": "pct",
+                              "source": {
+                                "kind": "stream",
+                                "event": "overview",
+                                "path": "meterValue"
+                              },
+                              "attention": {
+                                "source": {
+                                  "kind": "stream",
+                                  "event": "overview",
+                                  "path": "healthLevel"
+                                },
+                                "op": "gt",
+                                "value": 1
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "type": "statusCards",
+                          "source": {
+                            "kind": "stream",
+                            "event": "overview",
+                            "path": "machines"
+                          },
+                          "rowKey": "id",
+                          "titleKey": "name",
+                          "statusKey": "status",
+                          "subtitleKey": "summary",
+                          "attentionKey": "attention",
+                          "items": {
+                            "key": "chips",
+                            "labelKey": "label",
+                            "statusKey": "status",
+                            "pinnedKey": "pinned",
+                            "visibleRows": 1,
+                            "emptyText": "nothing read from this BMC yet"
+                          },
+                          "columns": {
+                            "default": 2,
+                            "min": 1,
+                            "max": 4
+                          },
+                          "emptyText": "No BMC has answered yet - the wall fills in as the first sweep collects replies."
+                        },
+                        {
+                          "type": "keyValue",
+                          "source": {
+                            "kind": "stream",
+                            "event": "overview",
+                            "path": "counts"
+                          },
+                          "rows": [
+                            {
+                              "key": "healthPct",
+                              "label": "Machines with nothing wrong",
+                              "format": "pct"
+                            },
+                            {
+                              "key": "monitored",
+                              "label": "Machines swept",
+                              "format": "number"
+                            },
+                            {
+                              "key": "on",
+                              "label": "Powered on",
+                              "format": "number"
+                            },
+                            {
+                              "key": "sensorsWarn",
+                              "label": "Sensors warning",
+                              "format": "number"
+                            },
+                            {
+                              "key": "sensorsBad",
+                              "label": "Sensors critical",
+                              "format": "number"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "conditional",
+                          "when": {
+                            "source": {
+                              "kind": "stream",
+                              "event": "overview",
+                              "path": "counts.wattsFrom"
+                            },
+                            "op": "gt",
+                            "value": 0
+                          },
+                          "blocks": [
+                            {
+                              "type": "keyValue",
+                              "source": {
+                                "kind": "stream",
+                                "event": "overview",
+                                "path": "counts"
+                              },
+                              "rows": [
+                                {
+                                  "key": "watts",
+                                  "label": "Watts drawn",
+                                  "format": "number"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "conditional",
+                          "when": {
+                            "source": {
+                              "kind": "stream",
+                              "event": "overview",
+                              "path": "hidden"
+                            },
+                            "op": "gt",
+                            "value": 0
+                          },
+                          "blocks": [
+                            {
+                              "type": "keyValue",
+                              "source": {
+                                "kind": "stream",
+                                "event": "overview"
+                              },
+                              "rows": [
+                                {
+                                  "key": "hidden",
+                                  "label": "More machines, not shown here",
+                                  "format": "number"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ],
+                  "else": [
+                    {
+                      "type": "note",
+                      "title": "Nothing is being swept",
+                      "lines": [
+                        "Add BMC addresses and credentials on the BMC Module settings page, or resume a machine you parked there, and this card becomes a live fleet-health wall."
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
           ]
         }
       ]

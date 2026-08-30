@@ -3,252 +3,1088 @@
     {
       "type": "conditional",
       "when": {
-        "source": { "kind": "stream", "event": "capabilities", "path": "problem" },
-        "op": "exists"
+        "source": {
+          "kind": "stream",
+          "event": "capabilities",
+          "path": "state"
+        },
+        "op": "eq",
+        "value": "connecting"
       },
       "blocks": [
         {
-          "type": "section",
-          "title": "ipmitool is missing",
-          "blocks": [
-            {
-              "type": "keyValue",
-              "source": { "kind": "stream", "event": "capabilities" },
-              "rows": [
-                { "key": "ipmitool", "label": "ipmitool" },
-                { "key": "problem", "label": "Problem" }
-              ]
-            },
-            {
-              "type": "actions",
-              "actions": [{ "label": "Look again", "method": "sweepNow" }]
-            }
+          "type": "note",
+          "title": "Waiting for a machine",
+          "lines": [
+            "This module runs ipmitool on the machine the app is connected to, and speaks IPMI over LAN from there to each BMC you saved.",
+            "Connect to a machine in the sidebar and this page fills in by itself. Machines you saved earlier are kept and start being swept again as soon as a connection is back."
           ]
         }
-      ]
-    },
-    {
-      "type": "section",
-      "title": "Machines",
-      "slowTarget": "bmc",
-      "slowAt": { "kind": "stream", "event": "machines", "path": "t" },
-      "blocks": [
+      ],
+      "else": [
         {
-          "type": "actions",
-          "actions": [{ "label": "Refresh now", "method": "sweepNow" }]
-        },
-        {
-          "type": "statusCards",
-          "source": { "kind": "stream", "event": "machines", "path": "machines" },
-          "rowKey": "id",
-          "titleKey": "name",
-          "statusKey": "status",
-          "subtitleKey": "powerLabel",
-          "note": { "key": "note", "label": "Notes" },
-          "items": { "key": "chips", "visibleRows": 2 },
-          "columns": { "default": 4, "min": 1, "max": 8 },
-          "emptyText": "No machines yet - add BMC addresses in Module settings",
-          "rowDetail": [
+          "type": "conditional",
+          "when": {
+            "source": {
+              "kind": "stream",
+              "event": "capabilities",
+              "path": "state"
+            },
+            "op": "eq",
+            "value": "blocked"
+          },
+          "blocks": [
             {
               "type": "section",
-              "title": "BMC information",
+              "title": "BMC control is not ready",
               "blocks": [
                 {
                   "type": "keyValue",
                   "source": {
-                    "kind": "invoke",
-                    "method": "machineInspect",
-                    "args": ["$row.id", "$row.revision"]
+                    "kind": "stream",
+                    "event": "capabilities"
                   },
                   "rows": [
-                    { "key": "firmware", "label": "Firmware" },
-                    { "key": "ipmiVersion", "label": "IPMI version" },
-                    { "key": "manufacturer", "label": "Manufacturer" },
-                    { "key": "product", "label": "Product" },
-                    { "key": "serial", "label": "Serial number" },
-                    { "key": "mac", "label": "MAC address" },
-                    { "key": "problem", "label": "Problem" }
-                  ]
-                }
-              ]
-            },
-            {
-              "type": "section",
-              "title": "Chassis power",
-              "blocks": [
-                {
-                  "type": "actions",
-                  "actions": [
                     {
-                      "label": "Power on",
-                      "method": "powerAction",
-                      "argsFromRow": ["id", "revision"],
-                      "args": ["on"],
-                      "confirm": "Power this machine on?"
+                      "key": "stateLabel",
+                      "label": "Status"
                     },
                     {
-                      "label": "Soft shutdown",
-                      "method": "powerAction",
-                      "argsFromRow": ["id", "revision"],
-                      "args": ["soft"],
-                      "confirm": "Ask the OS to shut down cleanly (ACPI)?"
+                      "key": "ipmitool",
+                      "label": "ipmitool"
                     },
                     {
-                      "label": "Power off (hard)",
-                      "method": "powerAction",
-                      "argsFromRow": ["id", "revision"],
-                      "args": ["off"],
-                      "kind": "danger",
-                      "confirm": "Cut power immediately? The OS gets no chance to shut down."
-                    },
-                    {
-                      "label": "Power cycle",
-                      "method": "powerAction",
-                      "argsFromRow": ["id", "revision"],
-                      "args": ["cycle"],
-                      "kind": "danger",
-                      "confirm": "Cut power and turn it back on immediately? The OS gets no chance to shut down."
-                    },
-                    {
-                      "label": "Reset",
-                      "method": "powerAction",
-                      "argsFromRow": ["id", "revision"],
-                      "args": ["reset"],
-                      "kind": "danger",
-                      "confirm": "Hard-reset this machine immediately? Unsaved work may be lost."
+                      "key": "problem",
+                      "label": "Problem"
                     }
                   ]
-                }
-              ]
-            },
-            {
-              "type": "form",
-              "title": "Boot device for next boot",
-              "fields": [
-                {
-                  "key": "device",
-                  "label": "Boot device",
-                  "input": "select",
-                  "initial": "none",
-                  "options": [
-                    { "value": "none", "label": "No override" },
-                    { "value": "pxe", "label": "PXE (network)" },
-                    { "value": "disk", "label": "Hard disk" },
-                    { "value": "cdrom", "label": "CD or DVD" },
-                    { "value": "bios", "label": "BIOS setup" }
-                  ]
                 },
                 {
-                  "key": "persistent",
-                  "label": "Persistent override",
-                  "input": "checkbox",
-                  "initial": false,
-                  "help": "Apply to every future boot instead of only the next one."
-                }
-              ],
-              "submit": {
-                "label": "Set boot device",
-                "method": "bootDevSet",
-                "argsFromRow": ["id", "revision"]
-              }
-            },
-            {
-              "type": "actions",
-              "actions": [
-                {
-                  "label": "Blink UID LED",
-                  "method": "identify",
-                  "argsFromRow": ["id", "revision"],
-                  "prompt": {
-                    "label": "Blink duration in seconds (default 15, maximum 255)",
-                    "input": "number",
-                    "initialKey": "identifySeconds"
-                  }
-                }
-              ]
-            },
-            {
-              "type": "section",
-              "title": "Sensors",
-              "blocks": [
-                {
-                  "type": "table",
-                  "source": {
-                    "kind": "invoke",
-                    "method": "sensorRows",
-                    "args": ["$row.id", "$row.revision"],
-                    "intervalKey": "bmc"
-                  },
-                  "rowKey": "idx",
-                  "columns": [
-                    { "key": "name", "label": "Sensor" },
-                    { "key": "reading", "label": "Reading" },
-                    { "key": "status", "label": "Status" }
-                  ],
-                  "filterKeys": ["name"],
-                  "emptyText": "No readings (is the BMC reachable?)"
-                }
-              ]
-            },
-            {
-              "type": "section",
-              "title": "Event log",
-              "blocks": [
-                {
-                  "type": "table",
-                  "source": {
-                    "kind": "invoke",
-                    "method": "selRows",
-                    "args": ["$row.id", "$row.revision"],
-                    "intervalKey": "bmc"
-                  },
-                  "rowKey": "idx",
-                  "sortDefault": { "key": "when", "dir": "desc" },
-                  "columns": [
-                    { "key": "when", "label": "When" },
-                    { "key": "sensor", "label": "Sensor" },
-                    { "key": "event", "label": "Event" }
-                  ],
-                  "emptyText": "No event log entries (or the BMC is unreachable)"
+                  "type": "note",
+                  "title": "Nothing is being swept",
+                  "tone": "warning",
+                  "lines": [
+                    "The machines you saved are kept, and none of them can be reached until the problem above is fixed on the connected machine."
+                  ]
                 },
                 {
                   "type": "actions",
                   "actions": [
                     {
-                      "label": "Clear event log",
-                      "method": "selClear",
-                      "args": ["$row.id", "$row.revision"],
-                      "kind": "danger",
-                      "confirm": "Erase every entry in this BMC's system event log?"
+                      "label": "Look again",
+                      "method": "sweepNow"
                     }
                   ]
                 }
               ]
             }
-          ]
-        }
-      ]
-    },
-    {
-      "type": "section",
-      "title": "Fleet power over time",
-      "blocks": [
-        {
-          "type": "chart",
-          "title": "Machines by state",
-          "kind": "area",
-          "source": {
-            "kind": "history",
-            "stream": "bmc",
-            "keys": ["on", "off", "unreachable", "authFailed"],
-            "liveEvent": "series"
-          },
-          "format": "number",
-          "series": [
-            { "key": "on", "label": "Power on" },
-            { "key": "off", "label": "Power off" },
-            { "key": "unreachable", "label": "Unreachable" },
-            { "key": "authFailed", "label": "Auth failed" }
+          ],
+          "else": [
+            {
+              "type": "conditional",
+              "when": {
+                "source": {
+                  "kind": "stream",
+                  "event": "capabilities",
+                  "path": "state"
+                },
+                "op": "eq",
+                "value": "checking"
+              },
+              "blocks": [
+                {
+                  "type": "note",
+                  "title": "Checking the connected machine",
+                  "lines": [
+                    "Making sure ipmitool is there before asking any BMC anything. Cards below fill in as answers arrive; a machine still reading \"Not checked yet\" simply has not answered yet."
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "note",
+              "title": "Nothing is being swept",
+              "tone": "warning",
+              "lines": [
+                "ipmitool works here, and no machine is switched on for sweeping. Add one on the Module settings page, or resume a machine you parked there."
+              ]
+            },
+            {
+              "type": "subnav",
+              "initial": "fleet",
+              "items": [
+                {
+                  "id": "fleet",
+                  "label": "Fleet",
+                  "icon": "Server",
+                  "blocks": [
+                    {
+                      "type": "section",
+                      "title": "Machines",
+                      "slowTarget": "bmc",
+                      "slowAt": {
+                        "kind": "stream",
+                        "event": "machines",
+                        "path": "t"
+                      },
+                      "blocks": [
+                        {
+                          "type": "actions",
+                          "actions": [
+                            {
+                              "label": "Sweep now",
+                              "method": "sweepNow"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "statusCards",
+                          "source": {
+                            "kind": "stream",
+                            "event": "machines",
+                            "path": "machines"
+                          },
+                          "rowKey": "id",
+                          "titleKey": "name",
+                          "statusKey": "status",
+                          "subtitleKey": "summary",
+                          "note": {
+                            "key": "note",
+                            "label": "Notes"
+                          },
+                          "items": {
+                            "key": "chips",
+                            "labelKey": "label",
+                            "statusKey": "status",
+                            "pinnedKey": "pinned",
+                            "visibleRows": 2,
+                            "pinnedFilterLabel": "Only what is not ok",
+                            "emptyText": "nothing read from this BMC yet"
+                          },
+                          "columns": {
+                            "default": 4,
+                            "min": 1,
+                            "max": 8
+                          },
+                          "emptyText": "No machines yet - add BMC addresses and credentials on the Module settings page.",
+                          "rowDetail": [
+                            {
+                              "type": "section",
+                              "title": "Sensors",
+                              "blocks": [
+                                {
+                                  "type": "conditional",
+                                  "when": {
+                                    "source": {
+                                      "kind": "invoke",
+                                      "method": "sensorRows",
+                                      "args": [
+                                        "$row.id",
+                                        "$row.revision"
+                                      ],
+                                      "intervalKey": "bmc",
+                                      "path": "problem"
+                                    },
+                                    "op": "exists"
+                                  },
+                                  "blocks": [
+                                    {
+                                      "type": "keyValue",
+                                      "source": {
+                                        "kind": "invoke",
+                                        "method": "sensorRows",
+                                        "args": [
+                                          "$row.id",
+                                          "$row.revision"
+                                        ],
+                                        "intervalKey": "bmc"
+                                      },
+                                      "rows": [
+                                        {
+                                          "key": "problem",
+                                          "label": "Problem"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "table",
+                                  "source": {
+                                    "kind": "invoke",
+                                    "method": "sensorRows",
+                                    "args": [
+                                      "$row.id",
+                                      "$row.revision"
+                                    ],
+                                    "intervalKey": "bmc",
+                                    "path": "rows"
+                                  },
+                                  "rowKey": "idx",
+                                  "columns": [
+                                    {
+                                      "key": "name",
+                                      "label": "Sensor"
+                                    },
+                                    {
+                                      "key": "reading",
+                                      "label": "Reading"
+                                    },
+                                    {
+                                      "key": "value",
+                                      "label": "Value",
+                                      "format": "number",
+                                      "align": "right"
+                                    },
+                                    {
+                                      "key": "unit",
+                                      "label": "Unit"
+                                    },
+                                    {
+                                      "key": "limit",
+                                      "label": "Nearest limit",
+                                      "format": "number",
+                                      "align": "right"
+                                    },
+                                    {
+                                      "key": "headroom",
+                                      "label": "Room left",
+                                      "format": "number",
+                                      "align": "right"
+                                    },
+                                    {
+                                      "key": "statusBadges",
+                                      "label": "State",
+                                      "format": "badges",
+                                      "sortable": false
+                                    }
+                                  ],
+                                  "filterKeys": [
+                                    "name",
+                                    "reading"
+                                  ],
+                                  "emptyText": "No sensor readings came back - this BMC may expose none, or the read may have failed above."
+                                }
+                              ]
+                            },
+                            {
+                              "type": "section",
+                              "title": "Event log",
+                              "blocks": [
+                                {
+                                  "type": "conditional",
+                                  "when": {
+                                    "source": {
+                                      "kind": "invoke",
+                                      "method": "selRows",
+                                      "args": [
+                                        "$row.id",
+                                        "$row.revision"
+                                      ],
+                                      "intervalKey": "bmc",
+                                      "path": "clockWarning"
+                                    },
+                                    "op": "exists"
+                                  },
+                                  "blocks": [
+                                    {
+                                      "type": "keyValue",
+                                      "source": {
+                                        "kind": "invoke",
+                                        "method": "selRows",
+                                        "args": [
+                                          "$row.id",
+                                          "$row.revision"
+                                        ],
+                                        "intervalKey": "bmc"
+                                      },
+                                      "rows": [
+                                        {
+                                          "key": "clockWarning",
+                                          "label": "Before you read these times"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "conditional",
+                                  "when": {
+                                    "source": {
+                                      "kind": "invoke",
+                                      "method": "selRows",
+                                      "args": [
+                                        "$row.id",
+                                        "$row.revision"
+                                      ],
+                                      "intervalKey": "bmc",
+                                      "path": "problem"
+                                    },
+                                    "op": "exists"
+                                  },
+                                  "blocks": [
+                                    {
+                                      "type": "keyValue",
+                                      "source": {
+                                        "kind": "invoke",
+                                        "method": "selRows",
+                                        "args": [
+                                          "$row.id",
+                                          "$row.revision"
+                                        ],
+                                        "intervalKey": "bmc"
+                                      },
+                                      "rows": [
+                                        {
+                                          "key": "problem",
+                                          "label": "Problem"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "table",
+                                  "source": {
+                                    "kind": "invoke",
+                                    "method": "selRows",
+                                    "args": [
+                                      "$row.id",
+                                      "$row.revision"
+                                    ],
+                                    "intervalKey": "bmc",
+                                    "path": "rows"
+                                  },
+                                  "rowKey": "idx",
+                                  "sortDefault": {
+                                    "key": "seq",
+                                    "dir": "desc"
+                                  },
+                                  "columns": [
+                                    {
+                                      "key": "seq",
+                                      "label": "No.",
+                                      "format": "number",
+                                      "align": "right"
+                                    },
+                                    {
+                                      "key": "when",
+                                      "label": "When (BMC clock)"
+                                    },
+                                    {
+                                      "key": "sensor",
+                                      "label": "Sensor"
+                                    },
+                                    {
+                                      "key": "event",
+                                      "label": "Event"
+                                    }
+                                  ],
+                                  "filterKeys": [
+                                    "sensor",
+                                    "event"
+                                  ],
+                                  "emptyText": "The event log came back empty - either nothing has been recorded or it was cleared."
+                                },
+                                {
+                                  "type": "actions",
+                                  "actions": [
+                                    {
+                                      "label": "Clear event log",
+                                      "method": "selClear",
+                                      "argsFromRow": [
+                                        "id",
+                                        "revision"
+                                      ],
+                                      "kind": "danger",
+                                      "confirm": "Erase every entry in this BMC's system event log? This cannot be undone."
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "type": "section",
+                              "title": "Chassis power",
+                              "blocks": [
+                                {
+                                  "type": "actions",
+                                  "actions": [
+                                    {
+                                      "label": "Power on",
+                                      "method": "powerAction",
+                                      "argsFromRow": [
+                                        "id",
+                                        "revision"
+                                      ],
+                                      "args": [
+                                        "on"
+                                      ],
+                                      "confirm": "Power this machine on?"
+                                    },
+                                    {
+                                      "label": "Soft shutdown",
+                                      "method": "powerAction",
+                                      "argsFromRow": [
+                                        "id",
+                                        "revision"
+                                      ],
+                                      "args": [
+                                        "soft"
+                                      ],
+                                      "confirm": "Ask the operating system to shut down cleanly (ACPI)?"
+                                    },
+                                    {
+                                      "label": "Power off (hard)",
+                                      "method": "powerAction",
+                                      "argsFromRow": [
+                                        "id",
+                                        "revision"
+                                      ],
+                                      "args": [
+                                        "off"
+                                      ],
+                                      "kind": "danger",
+                                      "confirm": "Cut power immediately? The operating system gets no chance to shut down."
+                                    },
+                                    {
+                                      "label": "Power cycle",
+                                      "method": "powerAction",
+                                      "argsFromRow": [
+                                        "id",
+                                        "revision"
+                                      ],
+                                      "args": [
+                                        "cycle"
+                                      ],
+                                      "kind": "danger",
+                                      "confirm": "Cut power and turn it straight back on? The operating system gets no chance to shut down."
+                                    },
+                                    {
+                                      "label": "Reset",
+                                      "method": "powerAction",
+                                      "argsFromRow": [
+                                        "id",
+                                        "revision"
+                                      ],
+                                      "args": [
+                                        "reset"
+                                      ],
+                                      "kind": "danger",
+                                      "confirm": "Hard-reset this machine now? Unsaved work on it may be lost."
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "type": "section",
+                              "title": "Next boot",
+                              "blocks": [
+                                {
+                                  "type": "conditional",
+                                  "when": {
+                                    "source": {
+                                      "kind": "stream",
+                                      "event": "ui",
+                                      "path": "hintsOn"
+                                    },
+                                    "op": "eq",
+                                    "value": true
+                                  },
+                                  "blocks": [
+                                    {
+                                      "type": "note",
+                                      "title": "What the boot override does",
+                                      "lines": [
+                                        "The override applies to the next boot only, unless Persistent is ticked, in which case it applies to every boot until it is set back to \"No override\".",
+                                        "Setting it does not restart anything by itself - pair it with a power action above.",
+                                        "The identify LED blinks on the chassis front panel, for finding the right box in a rack."
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "form",
+                                  "fields": [
+                                    {
+                                      "key": "device",
+                                      "label": "Boot device",
+                                      "input": "select",
+                                      "initial": "none",
+                                      "options": [
+                                        {
+                                          "value": "none",
+                                          "label": "No override"
+                                        },
+                                        {
+                                          "value": "pxe",
+                                          "label": "PXE (network)"
+                                        },
+                                        {
+                                          "value": "disk",
+                                          "label": "Hard disk"
+                                        },
+                                        {
+                                          "value": "cdrom",
+                                          "label": "CD or DVD"
+                                        },
+                                        {
+                                          "value": "bios",
+                                          "label": "BIOS setup"
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "key": "persistent",
+                                      "label": "Persistent override",
+                                      "input": "checkbox",
+                                      "initial": false
+                                    }
+                                  ],
+                                  "submit": {
+                                    "label": "Set boot device",
+                                    "method": "bootDevSet",
+                                    "argsFromRow": [
+                                      "id",
+                                      "revision"
+                                    ]
+                                  }
+                                },
+                                {
+                                  "type": "actions",
+                                  "actions": [
+                                    {
+                                      "label": "Blink UID LED",
+                                      "method": "identify",
+                                      "argsFromRow": [
+                                        "id",
+                                        "revision"
+                                      ],
+                                      "prompt": {
+                                        "label": "Blink for how many seconds (0 stops it, 255 is the maximum)",
+                                        "input": "number",
+                                        "initialKey": "identifySeconds"
+                                      }
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "type": "section",
+                              "title": "Serial console",
+                              "blocks": [
+                                {
+                                  "type": "terminal",
+                                  "label": "Open serial console",
+                                  "commandMethod": "solCommand",
+                                  "argsFromRow": [
+                                    "id",
+                                    "revision"
+                                  ]
+                                },
+                                {
+                                  "type": "conditional",
+                                  "when": {
+                                    "source": {
+                                      "kind": "stream",
+                                      "event": "ui",
+                                      "path": "hintsOn"
+                                    },
+                                    "op": "eq",
+                                    "value": true
+                                  },
+                                  "blocks": [
+                                    {
+                                      "type": "note",
+                                      "title": "What this opens",
+                                      "lines": [
+                                        "An IPMI Serial-over-LAN session: the machine's serial console, over the network, through its BMC. It shows the boot messages and a login prompt whether or not the operating system has a network of its own - which is what makes it worth having when nothing else can reach the machine.",
+                                        "It is a real shell in the app's terminal list and outlives this drawer, so closing the card does not end the session. Type the escape sequence (usually ~. ) to leave it, or close it from the Terminals page.",
+                                        "A BMC allows one serial session at a time. If it says the session is already in use, something else - or somebody else - has it."
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "type": "section",
+                              "title": "BMC information",
+                              "blocks": [
+                                {
+                                  "type": "conditional",
+                                  "when": {
+                                    "source": {
+                                      "kind": "invoke",
+                                      "method": "machineInspect",
+                                      "args": [
+                                        "$row.id",
+                                        "$row.revision"
+                                      ],
+                                      "path": "problem"
+                                    },
+                                    "op": "exists"
+                                  },
+                                  "blocks": [
+                                    {
+                                      "type": "keyValue",
+                                      "source": {
+                                        "kind": "invoke",
+                                        "method": "machineInspect",
+                                        "args": [
+                                          "$row.id",
+                                          "$row.revision"
+                                        ]
+                                      },
+                                      "rows": [
+                                        {
+                                          "key": "problem",
+                                          "label": "Problem"
+                                        }
+                                      ]
+                                    }
+                                  ],
+                                  "else": [
+                                    {
+                                      "type": "keyValue",
+                                      "source": {
+                                        "kind": "invoke",
+                                        "method": "machineInspect",
+                                        "args": [
+                                          "$row.id",
+                                          "$row.revision"
+                                        ]
+                                      },
+                                      "rows": [
+                                        {
+                                          "key": "firmware",
+                                          "label": "Firmware"
+                                        },
+                                        {
+                                          "key": "ipmiVersion",
+                                          "label": "IPMI version"
+                                        },
+                                        {
+                                          "key": "manufacturer",
+                                          "label": "Manufacturer"
+                                        },
+                                        {
+                                          "key": "product",
+                                          "label": "Product"
+                                        },
+                                        {
+                                          "key": "serial",
+                                          "label": "Serial number"
+                                        },
+                                        {
+                                          "key": "mac",
+                                          "label": "MAC address"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ],
+                          "attentionKey": "attention"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "id": "attention",
+                  "label": "Attention",
+                  "icon": "Thermometer",
+                  "blocks": [
+                    {
+                      "type": "section",
+                      "title": "Sensors that are not ok",
+                      "slowTarget": "bmc",
+                      "slowAt": {
+                        "kind": "stream",
+                        "event": "machines",
+                        "path": "t"
+                      },
+                      "blocks": [
+                        {
+                          "type": "table",
+                          "source": {
+                            "kind": "invoke",
+                            "method": "attentionRows",
+                            "intervalKey": "bmc"
+                          },
+                          "rowKey": "id",
+                          "columns": [
+                            {
+                              "key": "machine",
+                              "label": "Machine"
+                            },
+                            {
+                              "key": "address",
+                              "label": "BMC address"
+                            },
+                            {
+                              "key": "sensor",
+                              "label": "Sensor"
+                            },
+                            {
+                              "key": "reading",
+                              "label": "Reading"
+                            },
+                            {
+                              "key": "statusBadges",
+                              "label": "State",
+                              "format": "badges",
+                              "sortable": false
+                            }
+                          ],
+                          "filterKeys": [
+                            "machine",
+                            "sensor",
+                            "reading"
+                          ],
+                          "emptyText": "Every sensor on every swept machine is reading normally - there is nothing here to do."
+                        }
+                      ]
+                    },
+                    {
+                      "type": "conditional",
+                      "when": {
+                        "source": {
+                          "kind": "stream",
+                          "event": "ui",
+                          "path": "hintsOn"
+                        },
+                        "op": "eq",
+                        "value": true
+                      },
+                      "blocks": [
+                        {
+                          "type": "note",
+                          "title": "What this list is",
+                          "lines": [
+                            "Every reading the last sweep found outside its thresholds, across every machine that is switched on for sweeping, worst first. It is built from what the sweep already collected, so opening this tab asks nothing of any BMC.",
+                            "A machine contributes at most a dozen rows. If one is having a genuinely bad day, open its card on the Fleet tab for the full sensor table.",
+                            "How fresh these are is the sensor cadence under Module settings, not the sweep interval - sensors are re-read less often than power because they move more slowly."
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "id": "trends",
+                  "label": "Trends",
+                  "icon": "Activity",
+                  "blocks": [
+                    {
+                      "type": "section",
+                      "title": "Fleet over time",
+                      "blocks": [
+                        {
+                          "type": "chart",
+                          "title": "Machines by power state (last hour)",
+                          "kind": "area",
+                          "window": 3600,
+                          "format": "number",
+                          "source": {
+                            "kind": "history",
+                            "stream": "bmc",
+                            "keys": [
+                              "on",
+                              "off",
+                              "unreachable",
+                              "authFailed"
+                            ],
+                            "liveEvent": "series"
+                          },
+                          "series": [
+                            {
+                              "key": "on",
+                              "label": "Power on",
+                              "color": "success"
+                            },
+                            {
+                              "key": "off",
+                              "label": "Power off",
+                              "color": "muted"
+                            },
+                            {
+                              "key": "unreachable",
+                              "label": "Unreachable",
+                              "color": "destructive"
+                            },
+                            {
+                              "key": "authFailed",
+                              "label": "Auth failed",
+                              "color": "warning"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "chart",
+                          "title": "Sensor faults across the fleet (last six hours)",
+                          "kind": "line",
+                          "window": 21600,
+                          "format": "number",
+                          "source": {
+                            "kind": "history",
+                            "stream": "bmc",
+                            "keys": [
+                              "sensorsWarn",
+                              "sensorsBad"
+                            ],
+                            "liveEvent": "series"
+                          },
+                          "series": [
+                            {
+                              "key": "sensorsWarn",
+                              "label": "Warning",
+                              "color": "warning"
+                            },
+                            {
+                              "key": "sensorsBad",
+                              "label": "Critical",
+                              "color": "destructive"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "chart",
+                          "title": "Power drawn across the fleet (last twelve hours)",
+                          "kind": "area",
+                          "window": 43200,
+                          "unit": "W",
+                          "source": {
+                            "kind": "history",
+                            "stream": "bmc",
+                            "keys": [
+                              "watts"
+                            ],
+                            "liveEvent": "series"
+                          },
+                          "series": [
+                            {
+                              "key": "watts",
+                              "label": "Watts",
+                              "color": "warning"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "section",
+                      "title": "When each machine changed",
+                      "blocks": [
+                        {
+                          "type": "table",
+                          "source": {
+                            "kind": "invoke",
+                            "method": "incidentRows",
+                            "intervalKey": "bmc"
+                          },
+                          "rowKey": "id",
+                          "columns": [
+                            {
+                              "key": "t",
+                              "label": "When",
+                              "format": "datetime",
+                              "align": "right"
+                            },
+                            {
+                              "key": "machine",
+                              "label": "Machine"
+                            },
+                            {
+                              "key": "from",
+                              "label": "Was"
+                            },
+                            {
+                              "key": "to",
+                              "label": "Became"
+                            },
+                            {
+                              "key": "detail",
+                              "label": "What it looked like"
+                            }
+                          ],
+                          "sortDefault": {
+                            "key": "t",
+                            "dir": "desc"
+                          },
+                          "filterKeys": [
+                            "machine",
+                            "detail",
+                            "to"
+                          ],
+                          "emptyText": "Nothing has changed state since this module started keeping track - which is the answer you want."
+                        }
+                      ]
+                    },
+                    {
+                      "type": "conditional",
+                      "when": {
+                        "source": {
+                          "kind": "stream",
+                          "event": "ui",
+                          "path": "hintsOn"
+                        },
+                        "op": "eq",
+                        "value": true
+                      },
+                      "blocks": [
+                        {
+                          "type": "note",
+                          "title": "What lands on these charts",
+                          "lines": [
+                            "One point per sweep: how many machines were on, off, unreachable or refusing the saved credentials, and how many sensors across the whole fleet were reporting a warning or a critical state.",
+                            "How often a sweep runs is the BMC slow interval, in the app's own Settings under Update intervals. How often sensors are re-read on top of that is a rule on the Module settings page."
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "conditional",
+                      "when": {
+                        "source": {
+                          "kind": "stream",
+                          "event": "ui",
+                          "path": "hintsOn"
+                        },
+                        "op": "eq",
+                        "value": true
+                      },
+                      "blocks": [
+                        {
+                          "type": "note",
+                          "title": "Why this outlives the charts above",
+                          "lines": [
+                            "The charts are metrics history, which the app sweeps within forty-eight hours at the most. That is right for a line on a graph and wrong for the question people actually arrive with - how long has this been happening.",
+                            "This table is a different store: one row each time a machine changed state, kept for six months. A fleet where nothing changes writes nothing at all, which is what makes six months affordable.",
+                            "Only real changes are recorded. A machine that has not been checked yet, and one you have parked, are absences rather than states, so neither puts a row here."
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "id": "bulk",
+                  "label": "Bulk power",
+                  "icon": "Zap",
+                  "blocks": [
+                    {
+                      "type": "section",
+                      "title": "Act on several machines at once",
+                      "blocks": [
+                        {
+                          "type": "table",
+                          "source": {
+                            "kind": "stream",
+                            "event": "machines",
+                            "path": "machines"
+                          },
+                          "rowKey": "id",
+                          "selectable": true,
+                          "columns": [
+                            {
+                              "key": "name",
+                              "label": "Machine"
+                            },
+                            {
+                              "key": "ip",
+                              "label": "BMC address"
+                            },
+                            {
+                              "key": "powerLabel",
+                              "label": "Power"
+                            },
+                            {
+                              "key": "summary",
+                              "label": "State"
+                            },
+                            {
+                              "key": "enabledLabel",
+                              "label": "Sweeping"
+                            }
+                          ],
+                          "sortDefault": {
+                            "key": "name",
+                            "dir": "asc"
+                          },
+                          "filterKeys": [
+                            "name",
+                            "ip",
+                            "powerLabel"
+                          ],
+                          "emptyText": "No machines yet - add BMC addresses and credentials on the Module settings page.",
+                          "bulkActions": [
+                            {
+                              "label": "Power on",
+                              "method": "powerBulk",
+                              "args": [
+                                "on"
+                              ],
+                              "confirm": "Power on every machine you have ticked?"
+                            },
+                            {
+                              "label": "Soft shutdown",
+                              "method": "powerBulk",
+                              "args": [
+                                "soft"
+                              ],
+                              "confirm": "Ask every ticked machine's operating system to shut down cleanly?"
+                            },
+                            {
+                              "label": "Power off (hard)",
+                              "method": "powerBulk",
+                              "args": [
+                                "off"
+                              ],
+                              "kind": "danger",
+                              "confirm": "Cut power to every ticked machine immediately? None of their operating systems gets a chance to shut down."
+                            },
+                            {
+                              "label": "Power cycle",
+                              "method": "powerBulk",
+                              "args": [
+                                "cycle"
+                              ],
+                              "kind": "danger",
+                              "confirm": "Cut power to every ticked machine and turn it straight back on? None of their operating systems gets a chance to shut down."
+                            },
+                            {
+                              "label": "Reset",
+                              "method": "powerBulk",
+                              "args": [
+                                "reset"
+                              ],
+                              "kind": "danger",
+                              "confirm": "Hard-reset every ticked machine now? Unsaved work on any of them may be lost."
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "note",
+                      "title": "Before you tick a row",
+                      "tone": "warning",
+                      "lines": [
+                        "These act on every machine you have ticked, and three of the five cut power without asking the operating system first. There is no undo.",
+                        "A parked machine can still be acted on here - parking stops the sweep asking it things, not you.",
+                        "They run in parallel, as many at a time as the sweep concurrency rule allows, and the result says how many were reached and names the ones that were not."
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
           ]
         }
       ]

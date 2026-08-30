@@ -2,11 +2,13 @@ import { describe, expect, it, vi } from 'vitest'
 import { moduleHarness } from '../helpers/module-harness'
 import activateBmc from '../../bmc/main/index'
 import { buildMachinesPayload, type MachineRuntimeState } from '../../bmc/main/sweep'
-import type { BmcConfig } from '../../bmc/main/config'
+import { defaultSettings, type BmcConfig, type BmcMachine } from '../../bmc/main/store'
 
-function configWith(machine: Partial<BmcConfig['machines'][number]> = {}): BmcConfig {
+function configWith(machine: Partial<BmcMachine> = {}): BmcConfig {
   return {
-    version: 1,
+    version: 2,
+    settings: defaultSettings(),
+    hintsOn: true,
     machines: [
       {
         id: 'm1',
@@ -16,18 +18,22 @@ function configWith(machine: Partial<BmcConfig['machines'][number]> = {}): BmcCo
         port: 623,
         username: 'admin',
         password: 'secret',
+        enabled: true,
         ...machine
       }
     ]
   }
 }
 
+function stateWith(state: Partial<MachineRuntimeState> = {}): MachineRuntimeState {
+  return { revision: 'r1', power: 'on', reach: 'ok', lastSeen: null, sensors: null, draw: null,
+    clock: null, ...state }
+}
+
 describe('buildMachinesPayload: "seen" chip', () => {
   it('reports the last-seen time as a raw epoch + ValueFormat instead of a pre-formatted string', () => {
     const lastSeen = Date.UTC(2026, 0, 15, 13, 45, 30)
-    const states = new Map<string, MachineRuntimeState>([
-      ['m1', { revision: 'r1', power: 'on', reach: 'ok', lastSeen }]
-    ])
+    const states = new Map<string, MachineRuntimeState>([['m1', stateWith({ lastSeen })]])
 
     const payload = buildMachinesPayload(configWith(), states)
 
@@ -65,6 +71,8 @@ describe('primary election for the automatic sweep', () => {
     const lifecycle = activateBmc(harness.ctx)
     lifecycle.applyPollers?.()
     await vi.waitFor(() => expect(harness.pollers[0]?.start).toHaveBeenCalledWith(60_000))
-    expect(harness.exec).toHaveBeenCalled()
+    // Naming the command matters: "exec was called" would pass on any command
+    // at all, including one that never looked for ipmitool.
+    expect(harness.exec.mock.calls[0]?.[0]).toContain('command -v ipmitool')
   })
 })

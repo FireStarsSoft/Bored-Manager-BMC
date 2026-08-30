@@ -1,4 +1,5 @@
 import { vi } from 'vitest'
+import { ModuleNotices, secretKeyProblem } from '@shared/modules'
 import type {
   ModuleContext,
   ModuleExecOptions,
@@ -6,6 +7,8 @@ import type {
   ModulePoller,
   ModuleRecord,
   ModuleRecordQuery,
+  ModuleNotice,
+  ModuleNoticeEvent,
   ModuleStorageGrant,
   ModuleStreamHandle
 } from '@shared/modules'
@@ -34,6 +37,15 @@ export interface ModuleHarnessOptions {
    * so a test cannot pass by writing to a set the real module never declared.
    */
   recordSets?: string[]
+  /** Secrets the store already holds, by key - as plaintext, since nothing here encrypts. */
+  secrets?: Record<string, string>
+  /**
+   * Keys that are stored but cannot be read, standing in for a
+   * `data/secret.key` that was replaced. `secretGet` rejects for these and
+   * `secretList` reports them `readable: false`, which is the case a module
+   * has to handle by asking for the credential again.
+   */
+  unreadableSecrets?: string[]
   /** What `storageGrant()` answers with; the defaults are the app's own. */
   storageGrant?: Partial<ModuleStorageGrant>
 }
@@ -80,6 +92,8 @@ export interface ModuleHarness {
    * which is what makes it a useful assertion rather than a log.
    */
   afterStopCalls: string[]
+  /** Notices this module actually raised - what a person would have been shown. */
+  notices: ModuleNoticeEvent[]
   exec: ReturnType<typeof vi.fn<(command: string, options?: ModuleExecOptions) => Promise<ModuleExecResult>>>
   handlers: Map<string, ModuleHandler>
   ticks: Array<() => Promise<void>>
@@ -131,6 +145,16 @@ export function moduleHarness(
   const emit = vi.fn()
   const records = new Map<string, ModuleRecord[]>()
   const declaredSets = new Set(options.recordSets ?? [])
+  /** Every notice that got past the limits, in order, for a test to read. */
+  const noticesSent: ModuleNoticeEvent[] = []
+  const notices = new ModuleNotices((notice) => {
+    noticesSent.push(notice)
+  })
+  const secrets = new Map<string, { value: string; updatedAt: number }>(
+    Object.entries(options.secrets ?? {}).map(([key, value]) => [key, { value, updatedAt: 0 }])
+  )
+  /** Keys a test has made undecryptable, to stand in for a replaced secret.key. */
+  const unreadableSecrets = new Set(options.unreadableSecrets ?? [])
   const grant: ModuleStorageGrant = {
     moduleId: id,
     config: { requestedBytes: 512 * 1024, grantedBytes: 512 * 1024 },
@@ -144,6 +168,7 @@ export function moduleHarness(
       requestedBytes: 128 * 1024 * 1024,
       grantedBytes: 128 * 1024 * 1024
     })),
+    secrets: { requestedEntries: 32, grantedEntries: 32, valueBytes: 4 * 1024 },
     ...options.storageGrant
   }
   let revoked = false
@@ -269,6 +294,73 @@ export function moduleHarness(
       records.set(setId, kept)
       return Promise.resolve(before.length - kept.length)
     },
+    // The secret store, in memory and in the clear: a test wants to assert
+    // that the right credential was stored under the right key, and there is
+    // nothing to be gained by making it decrypt one first. What IS faithful is
+    // the rest of the contract - keys are validated, the grant is enforced,
+    // "never set" answers null while "cannot be read" rejects, and every
+    // member refuses after revocation.
+    secretGet: (key: string) => {
+      if (revoked) return refuse('secretGet')
+      const problem = secretKeyProblem(key)
+      if (problem) return Promise.reject(new Error(problem))
+      if (unreadableSecrets.has(key)) {
+        return Promise.reject(
+          new Error(
+            `secret "${key}" cannot be decrypted - data/secret.key is not the one it was written with, so it has to be entered again`
+          )
+        )
+      }
+      return Promise.resolve(secrets.get(key)?.value ?? null)
+    },
+    secretSet: (key: string, value: string) => {
+      if (revoked) return refuse('secretSet')
+      const problem = secretKeyProblem(key)
+      if (problem) return Promise.reject(new Error(problem))
+      const bytes = Buffer.byteLength(value, 'utf8')
+      if (bytes > grant.secrets.valueBytes) {
+        return Promise.reject(
+          new Error(`that secret is ${bytes} bytes and this module may store ${grant.secrets.valueBytes}`)
+        )
+      }
+      if (!secrets.has(key) && secrets.size >= grant.secrets.grantedEntries) {
+        return Promise.reject(
+          new Error(`this module may keep ${grant.secrets.grantedEntries} secrets and already has that many`)
+        )
+      }
+      secrets.set(key, { value, updatedAt: Date.now() })
+      unreadableSecrets.delete(key)
+      return Promise.resolve()
+    },
+    secretDelete: (key: string) => {
+      if (revoked) return refuse('secretDelete')
+      const problem = secretKeyProblem(key)
+      if (problem) return Promise.reject(new Error(problem))
+      unreadableSecrets.delete(key)
+      return Promise.resolve(secrets.delete(key))
+    },
+    secretList: () => {
+      if (revoked) return refuse('secretList')
+      return Promise.resolve(
+        [...secrets.entries()]
+          .map(([key, entry]) => ({
+            key,
+            updatedAt: entry.updatedAt,
+            readable: !unreadableSecrets.has(key)
+          }))
+          .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
+      )
+    },
+    // Faked with the real limits, because the limits ARE the feature: a module
+    // whose test only ever raises one notice never finds out that its poller
+    // would have raised sixty.
+    notify: (notice: ModuleNotice) => {
+      if (revoked) {
+        afterStopCalls.push('notify')
+        return 'invalid' as const
+      }
+      return notices.raise(id, notice)
+    },
     storageGrant: () => grant,
     storageUsage: () => {
       if (revoked) return refuse('storageUsage')
@@ -282,6 +374,8 @@ export function moduleHarness(
         historyBytes: 0,
         recordBytes,
         totalBytes: recordBytes,
+        secretEntries: secrets.size,
+        secretsUnreadable: unreadableSecrets.size,
         sets: grant.records.map((set) => ({
           id: set.id,
           label: set.label,
@@ -302,6 +396,7 @@ export function moduleHarness(
     ctx,
     records,
     afterStopCalls,
+    notices: noticesSent,
     revoke: () => {
       revoked = true
     },

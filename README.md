@@ -46,7 +46,7 @@ bmc/                the module, and nothing else — this folder is what ships
   module.json         manifest: pages, widgets, streams, methods
   main/               the main half, compiled by the app at install time
   ui/pages/*.json     page specs the app renders (Management, Module settings)
-  ui/widgets/*.json   Overview widget specs (BMC machines)
+  ui/widgets/*.json   Overview widget specs (BMC fleet health)
   README.md           what the module does
   CHANGELOG.md        module versions, independent of the app's
 shared/             vendored copy of the app's shared/ — what `@shared/*` means

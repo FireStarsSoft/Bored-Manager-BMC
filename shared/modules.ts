@@ -158,6 +158,21 @@ export interface ModuleStorageDecl {
   history?: { streams: string[]; maxMB: number }
   /** Append-only record sets, for anything that has to outlive the metrics retention window. */
   records?: ModuleRecordSetDecl[]
+  /**
+   * `ctx.secretGet/secretSet` - credentials, encrypted at rest with the
+   * install's own key.
+   *
+   * Declared apart from `config` because the two have opposite rules. A config
+   * document is one the user may hand-edit, that a module may cache, and that
+   * the app will happily show them. A secret is none of those things: it is
+   * written once, read at the point of use, and never handed back to a browser.
+   *
+   * Budgeted by entry count rather than bytes, because the number that matters
+   * is "how many credentials does this module keep", not "how much room does it
+   * want" - bytes would invite a module to use an encrypted store as general
+   * storage, which is not what it is for.
+   */
+  secrets?: { maxEntries: number; maxValueKB?: number }
 }
 
 /**
@@ -782,6 +797,36 @@ export interface ModuleRecordGrant extends ModuleStorageAllowance {
   overflow: 'evict-oldest' | 'refuse'
 }
 
+/**
+ * One entry in a module's secret store, without its value.
+ *
+ * Enough for a module's own settings page to say "saved" or "enter this one
+ * again", and nothing more: a value is only ever handed back by `secretGet`,
+ * one key at a time.
+ */
+export interface ModuleSecretEntry {
+  key: string
+  /** Epoch ms of the last `secretSet` for this key. */
+  updatedAt: number
+  /**
+   * False when the stored value can no longer be decrypted, which happens when
+   * `data/secret.key` was replaced - a fresh install, or a `data/` restored
+   * without it. The entry is kept rather than dropped so a module can tell the
+   * user to enter that one again, instead of behaving as though it was never
+   * set and quietly authenticating with nothing.
+   */
+  readable: boolean
+}
+
+/** What the app has agreed to keep in one module's secret store. */
+export interface ModuleSecretGrant {
+  requestedEntries: number
+  grantedEntries: number
+  /** Longest single value, in bytes. */
+  valueBytes: number
+  clampedBy?: 'ceiling' | 'user'
+}
+
 /** What the app has agreed to keep for one module. */
 export interface ModuleStorageGrant {
   moduleId: string
@@ -789,6 +834,7 @@ export interface ModuleStorageGrant {
   hostData: ModuleStorageAllowance
   history: ModuleStorageAllowance & { streams: string[] }
   records: ModuleRecordGrant[]
+  secrets: ModuleSecretGrant
 }
 
 /** What one module is using right now, against what it was granted. */
@@ -799,6 +845,13 @@ export interface ModuleStorageUsage {
   historyBytes: number
   recordBytes: number
   totalBytes: number
+  /**
+   * How many secrets are stored, and how many of those this install can still
+   * read. Never their keys: a key like `machine/10.0.0.5/root` is itself
+   * something worth not printing.
+   */
+  secretEntries: number
+  secretsUnreadable: number
   /** Per record set, so Settings can name the one that is filling up. */
   sets: Array<{
     id: string
@@ -821,6 +874,193 @@ export const MODULE_RECORD_PAGE_MAX = 5000
 /** The most rows one `recordAppend` may carry. */
 export const MODULE_RECORD_APPEND_MAX = 10_000
 
+export type ModuleNoticeLevel = 'info' | 'warning' | 'error'
+
+/**
+ * Something a module needs to say to whoever is using the app, wherever in it
+ * they happen to be.
+ *
+ * The gap this fills: a module's findings live on the module's own pages, so a
+ * fleet going critical is invisible to anybody looking at a terminal. What it
+ * deliberately does not fill: nothing reaches a person who is not looking at
+ * the app at all. Desktop notifications need a secure context and this app is
+ * normally reached over plain HTTP on a LAN address, so the honest ceiling is
+ * "anywhere in the app", and a module should not be written as though an alarm
+ * will find somebody.
+ */
+export interface ModuleNotice {
+  /**
+   * What this is *about*, not what it says - `fleet-health`, `disk-full`.
+   *
+   * Two notices with the same key are the same conversation: a later one
+   * replaces the earlier one rather than stacking beside it, and one repeated
+   * inside `MODULE_NOTICE_MIN_INTERVAL_MS` is dropped. A module that keys by
+   * message text instead has no dedupe at all, which is how a poller turns an
+   * app unusable.
+   */
+  key: string
+  level: ModuleNoticeLevel
+  /** One line. It is read in a corner, in passing, by somebody doing something else. */
+  title: string
+  /** An optional second line, for what to do about it. */
+  body?: string
+}
+
+/**
+ * One notice on its way to every browser: what the module said, plus who said
+ * it and when. `push:module-notice`.
+ */
+export interface ModuleNoticeEvent extends ModuleNotice {
+  moduleId: string
+  t: number
+}
+
+/** How often one module may raise the same key. */
+export const MODULE_NOTICE_MIN_INTERVAL_MS = 60_000
+
+/** And how many distinct notices it may raise in a window, whatever their keys. */
+export const MODULE_NOTICE_BURST = 10
+export const MODULE_NOTICE_BURST_WINDOW_MS = 5 * 60_000
+
+/**
+ * How many notices are kept for somebody who was not looking.
+ *
+ * A toast is gone in seconds, which is fine for "you did that" and useless for
+ * "your rack went critical at three in the morning". The rate limiter already
+ * caps the inflow hard, so a hundred is days of history for a healthy install
+ * and still a list a person can read to the bottom of.
+ *
+ * Kept in memory only, deliberately. These describe what is true now, and a
+ * module re-evaluates and re-announces anything still true after a restart -
+ * so persisting them would mean greeting somebody with alarms for problems
+ * that were fixed while the server was down.
+ */
+export const MODULE_NOTICE_HISTORY = 100
+
+/** The maximum length of a notice's own strings, so one cannot fill a screen. */
+export const MODULE_NOTICE_TITLE_MAX = 120
+export const MODULE_NOTICE_BODY_MAX = 400
+
+/**
+ * What a spent notice tells the module. `ok` went out; everything else was
+ * dropped, and by which rule.
+ */
+export type ModuleNoticeVerdict = 'ok' | 'too-soon' | 'too-many' | 'invalid'
+
+/**
+ * The gate every `ctx.notify` passes through.
+ *
+ * It lives here, in the vendored contract, rather than in the server: the test
+ * harness each module repository copies has to be able to build one, so that a
+ * module's own tests find out that its poller would have raised sixty notices
+ * rather than the one the test happened to trigger. The limits ARE the
+ * feature - see `ModuleNotice.key`.
+ */
+const LEVELS: ReadonlySet<string> = new Set<ModuleNoticeLevel>(['info', 'warning', 'error'])
+
+function clean(value: unknown, max: number): string {
+  if (typeof value !== 'string') return ''
+  // Collapsed, because a module can put anything here and a toast is one line
+  // in a corner - a newline in it breaks the layout rather than the sentence.
+  return value.replace(/\s+/g, ' ').trim().slice(0, max)
+}
+
+export class ModuleNotices {
+  /** When each `<moduleId>\0<key>` was last let through. */
+  private lastAt = new Map<string, number>()
+  /** Recent send times per module, for the burst rule. */
+  private recentSends = new Map<string, number[]>()
+  /** The last `MODULE_NOTICE_HISTORY` that went out, oldest first. */
+  private history: ModuleNoticeEvent[] = []
+
+  constructor(private deliver: (notice: ModuleNoticeEvent) => void) {}
+
+  /** What a browser that has just connected missed, oldest first. */
+  recent(): ModuleNoticeEvent[] {
+    return [...this.history]
+  }
+
+  raise(moduleId: string, raw: ModuleNotice, now = Date.now()): ModuleNoticeVerdict {
+    if (typeof raw !== 'object' || raw === null) return 'invalid'
+    const key = clean(raw.key, 64)
+    const title = clean(raw.title, MODULE_NOTICE_TITLE_MAX)
+    const body = clean(raw.body, MODULE_NOTICE_BODY_MAX)
+    const level = LEVELS.has(raw.level) ? raw.level : 'info'
+    if (!key || !title) return 'invalid'
+
+    const keyed = `${moduleId}\0${key}`
+    const last = this.lastAt.get(keyed)
+    if (last != null && now - last < MODULE_NOTICE_MIN_INTERVAL_MS) return 'too-soon'
+
+    // Kept before the burst check rather than after: a module hammering one key
+    // should not also burn its allowance, or a genuinely new finding would be
+    // dropped because of the noisy one beside it.
+    const window = (this.recentSends.get(moduleId) ?? []).filter(
+      (at) => now - at < MODULE_NOTICE_BURST_WINDOW_MS
+    )
+    if (window.length >= MODULE_NOTICE_BURST) {
+      this.recentSends.set(moduleId, window)
+      return 'too-many'
+    }
+
+    window.push(now)
+    this.recentSends.set(moduleId, window)
+    this.lastAt.set(keyed, now)
+    const event: ModuleNoticeEvent = { moduleId, key, level, title, ...(body ? { body } : {}), t: now }
+    this.history.push(event)
+    if (this.history.length > MODULE_NOTICE_HISTORY) {
+      this.history.splice(0, this.history.length - MODULE_NOTICE_HISTORY)
+    }
+    this.deliver(event)
+    return 'ok'
+  }
+
+  /**
+   * Forget a module's history.
+   *
+   * Called when it is reloaded or uninstalled. A module that has just been
+   * restarted because something was wrong with it should be able to say so
+   * immediately, rather than being told it already did a minute ago.
+   */
+  forget(moduleId: string): void {
+    this.recentSends.delete(moduleId)
+    // Its past stays: a module being reloaded does not un-happen what it
+    // already said, and somebody who was away still wants to read it.
+    const prefix = `${moduleId}\0`
+    for (const keyed of this.lastAt.keys()) {
+      if (keyed.startsWith(prefix)) this.lastAt.delete(keyed)
+    }
+  }
+}
+
+/**
+ * What a secret may be keyed by.
+ *
+ * Deliberately permissive enough for the natural shapes - `machine/m1`,
+ * `host:port`, `user@address` - and deliberately without a dot-dot or a
+ * backslash, because a key is a name inside one JSON document and should never
+ * read like a path even though it is never used as one.
+ */
+export const MODULE_SECRET_KEY_PATTERN = /^[A-Za-z0-9._@:/-]{1,128}$/
+
+/**
+ * Names that are never a credential and are always a probe. The store keeps
+ * its map prototype-less so none of them could do harm anyway; refusing them
+ * outright means nobody has to remember that when reading the code.
+ */
+const RESERVED_SECRET_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
+
+/** Whether a string may be used as a secret key. */
+export function secretKeyProblem(key: unknown): string | null {
+  if (typeof key !== 'string' || !key) return 'secret key is empty'
+  if (key.includes('..')) return 'secret key contains ".."'
+  if (RESERVED_SECRET_KEYS.has(key)) return `secret key "${key}" is reserved`
+  if (!MODULE_SECRET_KEY_PATTERN.test(key)) {
+    return `secret key "${key.slice(0, 40)}" has characters outside A-Z a-z 0-9 . _ @ : / -, or is over 128 long`
+  }
+  return null
+}
+
 /**
  * The hard limits behind every grant. A manifest may ask for less and get it;
  * asking for more is clamped rather than refused, because a module that wants
@@ -837,7 +1077,10 @@ export const MODULE_STORAGE_CEILINGS = {
   /** Every record set of one module together. */
   recordTotalBytes: 2 * 1024 * 1024 * 1024,
   recordSets: 16,
-  retentionDays: 3650
+  retentionDays: 3650,
+  /** Secrets are counted, not weighed - see `ModuleStorageDecl.secrets`. */
+  secretEntries: 256,
+  secretValueBytes: 4 * 1024
 } as const
 
 /**
@@ -848,7 +1091,15 @@ export const MODULE_STORAGE_CEILINGS = {
 export const MODULE_STORAGE_DEFAULTS = {
   configBytes: 512 * 1024,
   hostDataBytes: 512 * 1024,
-  historyBytes: 64 * 1024 * 1024
+  historyBytes: 64 * 1024 * 1024,
+  /**
+   * A module that never declared `storage.secrets` still gets a small store,
+   * so a first `secretSet` does not fail on a manifest field its author had no
+   * reason to know about. Declaring one is how a module asks for more, and how
+   * a user can see before installing that it intends to keep credentials.
+   */
+  secretEntries: 32,
+  secretValueBytes: 4 * 1024
 } as const
 
 /**
@@ -863,12 +1114,17 @@ export const MODULE_STORAGE_DEFAULTS = {
  * is gone. What that looks like depends on the member:
  *
  * - `exec`, `execSudo`, `stream`, `streamSudo`, `recordAppend`, `recordQuery`,
- *   `recordDelete` and `storageUsage` reject with
+ *   `recordDelete`, `secretGet`, `secretSet`, `secretDelete`, `secretList` and
+ *   `storageUsage` reject with
  *   `module "<id>" is no longer running`, and `handle`, `createPoller` (and a
  *   poller's `start`) throw it. A module has to be able to tell that its
  *   command did not run, and a collector has to be able to tell that its rows
  *   were not kept - a silently dropped append would leave a hole its cursor
- *   claims was filled.
+ *   claims was filled. The secret store is in this tier for the same reason:
+ *   a module told its credential was saved will stop asking the user for it.
+ * - `notify` answers `'invalid'` and shows nobody anything, because a module
+ *   that has stopped has no business interrupting a person - and a throw here
+ *   would escape a detached promise for the sake of a toast.
  * - `emit`, `addHistory`, `log`, `configSet` and `hostDataSet` do nothing;
  *   `configGet`, `hostDataGet` and `hostKey` return `null`, and
  *   `storageGrant` keeps answering with the grant the module was given, since
@@ -1003,6 +1259,43 @@ export interface ModuleContext {
   recordQuery(setId: string, query?: ModuleRecordQuery): Promise<ModuleRecordPage>
   /** Drop rows matching the query; answers how many went. */
   recordDelete(setId: string, query?: ModuleRecordQuery): Promise<number>
+  /**
+   * Read one of this module's secrets. Null when nothing was ever stored under
+   * `key`; **rejects** when something is there and this install can no longer
+   * decrypt it, so a module can tell "never set" apart from "lost with the
+   * key" and say which.
+   *
+   * Fetch at the point of use and do not keep it in a field. Whatever a module
+   * holds can end up in a `snapshots()` payload or a `handle()` reply, and both
+   * of those reach a browser - the app promises never to expose a secret by
+   * itself, and cannot promise the same about a module's own answers.
+   */
+  secretGet(key: string): Promise<string | null>
+  /**
+   * Store or replace one secret, encrypted with the install's key.
+   *
+   * `key` matches `[A-Za-z0-9._@:/-]{1,128}`. Rejects rather than truncating
+   * when the value is over the grant's `valueBytes`, rejects when the store is
+   * full, and rejects once the module has stopped - a `secretSet` that quietly
+   * did nothing would leave a user believing a credential was saved.
+   */
+  secretSet(key: string, value: string): Promise<void>
+  /** Forget one secret; resolves false when there was nothing under `key`. */
+  secretDelete(key: string): Promise<boolean>
+  /** Every key this module has stored, with metadata - never with values. */
+  secretList(): Promise<ModuleSecretEntry[]>
+  /**
+   * Say something to whoever is using the app, from wherever they are in it.
+   *
+   * Best-effort and rate-limited, and it answers with which of those happened
+   * so a module can log the difference rather than assume it was heard. Raise
+   * one when something has *changed* - a fleet has gone critical, a job has
+   * failed - and never on a cadence: a notice per poll tick is how an app
+   * becomes unusable, which is what the limits behind this exist to prevent.
+   *
+   * Not an alarm. Nothing reaches somebody who does not have the app open.
+   */
+  notify(notice: ModuleNotice): ModuleNoticeVerdict
   /** What the app agreed to keep for this module - granted figures, not requested ones. */
   storageGrant(): ModuleStorageGrant
   /** What it is using right now, for a module that wants to show its own footprint. */
@@ -1307,6 +1600,20 @@ export function storageProblems(raw: unknown, moduleId: unknown): string[] {
           const problem = historyStreamProblem(typeof moduleId === 'string' ? moduleId : '', stream)
           if (problem) problems.push(`storage.history.streams: ${problem}`)
         }
+      }
+    }
+  }
+
+  if (decl.secrets != null) {
+    if (!isRecord(decl.secrets)) {
+      problems.push('storage.secrets is not an object')
+    } else {
+      const secrets = decl.secrets as { maxEntries?: unknown; maxValueKB?: unknown }
+      const entries = sizeProblem('storage.secrets.maxEntries', secrets.maxEntries)
+      if (entries) problems.push(entries)
+      if (secrets.maxValueKB != null) {
+        const value = sizeProblem('storage.secrets.maxValueKB', secrets.maxValueKB)
+        if (value) problems.push(value)
       }
     }
   }

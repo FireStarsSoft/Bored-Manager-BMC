@@ -129,6 +129,23 @@ describe(`${ID}: what its two halves promise each other`, () => {
     expect([...registeredMethods()].sort()).toEqual([...declared].sort())
   })
 
+  /**
+   * The two methods 2.0.0 added, named rather than counted.
+   *
+   * `registers exactly the methods its manifest declares` above already
+   * compares the two sets, so this cannot fail on its own - but it fails
+   * *legibly*. A halved-then-restored list of twenty-one strings is a diff
+   * nobody reads; "attentionRows is not registered" is a sentence. And these
+   * two are the pair most likely to be lost, because each is reachable from
+   * exactly one tab and neither has an older name to fall back on.
+   */
+  it.each(['attentionRows', 'powerBulk'])('declares and registers %s', (method) => {
+    const registered = registeredMethods()
+
+    expect(declared.has(method), `${method} is missing from manifest.methods`).toBe(true)
+    expect(registered.has(method), `${method} is declared but nothing registers it`).toBe(true)
+  })
+
   it('calls only methods it registered, from every page and widget', () => {
     const registered = registeredMethods()
     const missing: string[] = []

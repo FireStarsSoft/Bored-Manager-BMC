@@ -1,6 +1,136 @@
 # Changelog
 
-Module versions are independent of the app's. Version 1.0.0 required Bored Manager **0.3.2**; from 1.0.8 the floor is **0.4.0**, for `ctx.onConfigChange` and `ctx.isPrimaryInstance`.
+Module versions are independent of the app's. Version 1.0.0 required Bored Manager **0.3.2**; 1.0.8 raised the floor to **0.4.0**, and 2.0.0 raises it to **0.6.0** - the release that gave modules an encrypted credential store and an attention signal, both of which this one depends on.
+
+## 2.0.0
+
+The release this module existed to make. Until now a machine's colour came from
+its chassis power state alone, so a server whose fan had failed and whose inlet
+was at 90 °C reported **Power on**, in green - technically true, and the single
+most useful thing this module could have said, missed.
+
+- **Sensor readings decide a machine's health.** A sweep now re-reads each
+  machine's sensors on a cadence of its own and folds the result into the card:
+  worst wins, so a critical sensor turns a running machine red and a
+  non-critical one turns it amber. Severity comes from IPMI's own threshold
+  vocabulary - the firmware has already compared each reading against the
+  thresholds it was configured with. A sensor row the module cannot read is
+  reported and counted, and deliberately never darkens an otherwise healthy
+  card: teaching people to distrust the colour would cost more than the row is
+  worth.
+- **The Overview card became a fleet health wall.** A ring showing the share of
+  swept machines with nothing wrong, a per-machine wall sorted worst-first with
+  its faults pinned, and - only while something is wrong - an attention meter.
+  A warning holds a steady amber whose length tracks how much of the fleet is
+  affected; anything critical pulses, and so does the card of each broken
+  machine, so the wall points at the one to open rather than just going red.
+  The module says *this is urgent* and the app decides what urgent looks like,
+  which is also why the movement respects a reader's reduced-motion setting.
+- **IPMI passwords are encrypted now, and this module stops apologising for
+  them.** Until Bored Manager 0.6.0 a module could persist JSON and nothing
+  else, so these sat in clear text in `module-config/bmc.json` and every screen
+  that showed the machine list had to say so. They now live in the app's own
+  secret store, encrypted with the install's key, read back one at a time at
+  the moment they are needed and held nowhere. **Upgrading moves them for you**
+  on the first sweep, and if anything goes wrong part-way the old file is left
+  exactly as it was, so the module keeps working and tries again.
+  If `data/secret.key` is ever lost the passwords are gone with it - but the
+  module can tell that apart from "never set", so the affected rows say *enter
+  it again* instead of quietly failing to authenticate, which is how BMC
+  accounts get locked.
+- **Power draw, where the controller will say.** Boards that implement DCMI
+  are asked what the chassis is drawing, on the same cadence as sensors. It
+  shows on the card as a plain figure rather than a colour - nothing here knows
+  what a given machine ought to draw - and the Trends tab charts the fleet total
+  over twelve hours. A board that does not implement DCMI says so once and is
+  never asked again, so the cost is one command per machine per sensor sweep
+  and only for the boards that answer it.
+- **A critical fleet now interrupts you.** When the fleet crosses into
+  critical - and again when it comes back - the module raises a notice that
+  reaches you anywhere in the app, not only on its own pages. It fires on the
+  change rather than on the state, so a fault that lasts all afternoon is one
+  interruption and not one per sweep. Nothing reaches you with the app closed:
+  desktop notifications need a secure context and this app is normally served
+  over plain HTTP.
+- **A serial console.** IPMI Serial-over-LAN, from the machine's own card: its
+  serial line over the network, showing boot messages and a login prompt
+  whether or not the operating system has a network of its own. It was left out
+  of every earlier version for a good reason - a `terminal` block's command is
+  built in the browser, so a password in one would be visible in the spec and
+  on the wire. Bored Manager 0.6.0 lets a module compose that command on the
+  server instead, so the password is staged into a private file over stdin and
+  the command carries only a path.
+- **A log of when each machine changed**, on the Trends tab, kept for six
+  months. The charts beside it are metrics history, which the app sweeps within
+  forty-eight hours at the most - right for a line on a graph, useless for the
+  question people actually arrive with, which is how long something has been
+  happening. Only real changes are written: a fleet behaving itself costs
+  nothing at all, and a machine that has not been checked yet or has been
+  parked is an absence rather than a state, so neither puts a row there.
+- **A warning when a controller's clock is wrong.** Every timestamp in an event
+  log comes from the BMC's own clock, so one running hours out turns its whole
+  log into something nobody can line up against anything else - and unlike a
+  failed fan, none of that is visible until somebody tries to correlate an
+  incident and finds the times disagree. It is checked about once an hour,
+  shows as a chip on the card and as a plain sentence above the event log, and
+  is deliberately never folded into the machine's colour: the hardware is fine,
+  the log is what suffers.
+- **Sensor thresholds.** The drawer's sensor table now shows the nearest
+  threshold the controller was configured with and how much room is left before
+  it, so "ok" becomes "ok, and eight degrees from not being". It costs a second
+  command, and only in the drawer - a sweep never asks for it.
+- **An Attention tab**: every sensor across the whole fleet that is not ok, in
+  one table, worst first. It is built from what the sweep already collected, so
+  opening it asks nothing of any BMC. Finding out what was wrong with a rack
+  used to mean opening cards one at a time until the red one turned up.
+- **A Bulk power tab**: tick several machines and act on all of them at once,
+  bounded by the same concurrency rule as a sweep. Rows that have gone since
+  you ticked them are skipped and counted rather than guessed at, and the
+  result names what it could not reach.
+- **Machines can be parked.** Switching sweeping off for an entry keeps its row
+  and its credentials and stops asking it anything, so a machine that is off for
+  a fortnight does not have to be typed in again - and reads as parked rather
+  than as unreachable. At most 64 machines are kept, because each one costs an
+  ipmitool call per sweep.
+- **Four rules you can change**, under Module settings → Behaviour: how many
+  machines are swept at once, how often sensors are re-read, how many event-log
+  entries a drawer fetches, and what the identify prompt opens with. All four
+  were constants. Leaving a field empty keeps what it is now.
+- **Failures say what to do about them.** `unreachable | auth | error` became
+  `unreachable | timeout | dns | auth | refused | error`, each with a written
+  explanation naming the likely causes in the order they are usually true. A
+  BMC that answered without a power state is no longer reported as unreachable.
+- **Errors are no longer swallowed.** `sensorRows` and `selRows` answered with a
+  bare `[]` when a read failed, so "this BMC has no event log entries" and "this
+  BMC did not answer" drew the same picture. **This is a breaking change to both
+  methods**, which now answer `{ rows, problem }`; the pages that read them ship
+  in the same archive, so nothing outside this module sees it.
+- **Readiness has five states** - connecting, checking, blocked, attention,
+  ready - and both pages gate on it, so a page that is merely starting no longer
+  looks like a broken one. A probe that threw stays *checking* and retries,
+  rather than accusing the connected machine of missing a tool.
+- **Both pages regrouped.** Management is Fleet, Attention, Trends and Bulk
+  power; the machine drawer
+  now opens with sensors and the event log, because that is what you opened it
+  for, with the power controls below them rather than under the mouse. Settings
+  is Machines, Behaviour and Readiness. Explanatory prose moved out of field
+  hints into notes you can switch off, and warnings stay visible whatever that
+  switch says.
+- **Trends** charts fleet sensor faults over six hours alongside power states
+  over one. The two new keys are additive: existing history is unaffected.
+- Sensor readings now carry their number and unit separately, so a table can
+  sort by temperature; an implausible reading (a lost sensor's 65535 RPM) keeps
+  its raw text and drops the number rather than poisoning a comparison.
+  Duplicate sensor names are disambiguated on the name, not by suffixing the
+  hex id, which could collide with a real one.
+- The settings table reports its last test as a raw timestamp for your browser
+  to render, instead of a clock time baked in the server's own timezone.
+- The module was reorganised into `runtime/`, `store/`, `ipmi/`, `sweep/` and
+  `machines/`, with `index.ts` reduced to its six lifecycle hooks.
+- The unused `hostData` storage grant was dropped from the manifest.
+- **Upgrading** keeps everything: a version 1 settings document is read with
+  every machine enabled and every rule at its default, and is only rewritten
+  when you next change something.
 
 ## 1.0.9
 

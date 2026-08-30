@@ -1,143 +1,37 @@
 /**
  * BMC management through `ipmitool` on the machine Bored Manager is connected
- * to. Network polling is slow and bounded; renderer invoke sources either read
- * memory or use short-lived query caches.
+ * to. That machine is the management station; the targets are a list of BMC
+ * endpoints the user maintains, reached over IPMI 2.0 lanplus.
+ *
+ * Network polling is slow and bounded: one pass over the fleet on the slow
+ * interval, sensors on a slower cadence than power, and detail reads only
+ * while somebody has the drawer open. Everything else lives under `runtime/`.
  */
 import type { ModuleActivate, ModuleContext } from '@shared/modules'
-import type { OkResult } from '@shared/types'
-import { Actions } from './actions'
-import { ConfigStore } from './config'
-import { MachineEditor } from './machines'
-import {
-  emptyCapabilities,
-  probeManagementHost,
-  type BmcCapabilities
-} from './probe'
-import { Queries } from './queries'
-import { Sweeper } from './sweep'
-
-const INTERVAL_KEY = 'bmc'
+import { createRuntime, registerHandlers } from './runtime'
+import { INTERVAL_KEY } from './sweep'
 
 const activate: ModuleActivate = (ctx: ModuleContext) => {
-  const config = new ConfigStore(ctx)
-  let capabilities: BmcCapabilities = emptyCapabilities()
-  let capabilityFlight: Promise<BmcCapabilities> | null = null
-  let capabilityGeneration = 0
-  let stopped = false
-
-  const refreshCapabilities = (force = false): Promise<BmcCapabilities> => {
-    if (!force && capabilities.connected) return Promise.resolve(capabilities)
-    if (capabilityFlight) return capabilityFlight
-
-    const generation = capabilityGeneration
-    const pending = probeManagementHost(ctx)
-      .then((next) => {
-        if (stopped || generation !== capabilityGeneration) return next
-        capabilities = next
-        ctx.emit('capabilities', capabilities)
-        if (capabilities.problem) ctx.log(`bmc: ${capabilities.problem}`)
-        return next
-      })
-      .finally(() => {
-        if (capabilityFlight === pending) capabilityFlight = null
-      })
-    capabilityFlight = pending
-    return pending
-  }
-
-  const sweeper = new Sweeper(ctx, config, () => refreshCapabilities(false))
-  const queries = new Queries(ctx, config)
-  const actions = new Actions(ctx, config, sweeper, queries)
-  const machines = new MachineEditor(ctx, config, sweeper, queries)
-
-  ctx.handle('machineRows', () => machines.rows())
-  ctx.handle('machineCheck', (...args: unknown[]) =>
-    args.length >= 3
-      ? machines.check(String(args[0]), String(args[1]), args[2])
-      : machines.check(null, null, args[0])
-  )
-  ctx.handle('machineApply', (...args: unknown[]) =>
-    args.length >= 3
-      ? machines.apply(String(args[0]), String(args[1]), args[2])
-      : machines.apply(null, null, args[0])
-  )
-  ctx.handle('machineDelete', (id: unknown, revision: unknown) =>
-    machines.delete(id, revision)
-  )
-  ctx.handle('machineTest', (id: unknown, revision: unknown) =>
-    machines.test(id, revision)
-  )
-  ctx.handle('machineInspect', (id: unknown, revision: unknown) =>
-    queries.machineInspect(id, revision)
-  )
-  ctx.handle('powerAction', (id: unknown, revision: unknown, action: unknown) =>
-    actions.powerAction(id, revision, action)
-  )
-  ctx.handle('sensorRows', (id: unknown, revision: unknown) =>
-    queries.sensorRows(id, revision)
-  )
-  ctx.handle('selRows', (id: unknown, revision: unknown) =>
-    queries.selRows(id, revision)
-  )
-  ctx.handle('selClear', (id: unknown, revision: unknown) =>
-    actions.selClear(id, revision)
-  )
-  ctx.handle(
-    'bootDevSet',
-    (id: unknown, revision: unknown, device: unknown, persistent: unknown) =>
-      actions.bootDevSet(id, revision, device, persistent)
-  )
-  ctx.handle('identify', (id: unknown, revision: unknown, seconds: unknown) =>
-    actions.identify(id, revision, seconds)
-  )
-  ctx.handle('sweepNow', async (): Promise<OkResult> => {
-    if (!ctx.connected) return { ok: false, error: 'not connected to a management machine' }
-    const available = await refreshCapabilities(true)
-    if (available.problem) return { ok: false, error: available.problem }
-    await sweeper.run()
-    return { ok: true }
-  })
-
-  let applied: string | null = null
+  const runtime = createRuntime(ctx)
+  registerHandlers(runtime)
+  runtime.publishUi()
+  // Detached on purpose: activation must not wait on the secret store, and a
+  // module that failed to start because a migration was slow would be a worse
+  // outcome than one whose passwords move a moment later. It logs its own
+  // failures and leaves the clear-text document working if it cannot finish.
+  void runtime.migrate()
 
   return {
     applyPollers() {
-      const seconds = Math.max(0, ctx.slowIntervalSec(INTERVAL_KEY))
-      const primary = ctx.isPrimaryInstance
-      const key = `${ctx.connected}|${seconds}|${primary}`
-      if (key === applied) return
-      applied = key
-      sweeper.poller.stop()
-      // The sweep reaches BMC endpoints the user configured, not this
-      // instance's own connected machine - only the elected primary runs it
-      // automatically, so two connected machines do not both hammer the same
-      // endpoints. A manual "sweep now" is unaffected.
-      if (!ctx.connected || !primary) return
-
-      void refreshCapabilities(true).then(() => {
-        if (stopped || !ctx.connected || applied !== key) return
-        if (seconds > 0) sweeper.poller.start(seconds * 1000)
-        else void sweeper.run()
-      })
+      runtime.applyPollers()
     },
 
     reset() {
-      applied = null
-      capabilityGeneration += 1
-      capabilityFlight = null
-      capabilities = emptyCapabilities()
-      sweeper.reset()
-      queries.reset()
-      machines.clear()
-      config.reset()
+      runtime.reset()
     },
 
     snapshots() {
-      return {
-        machines: sweeper.snapshot(),
-        series: sweeper.series,
-        capabilities
-      }
+      return runtime.snapshots()
     },
 
     slowTargets() {
@@ -146,18 +40,11 @@ const activate: ModuleActivate = (ctx: ModuleContext) => {
 
     async refreshSlow() {
       if (!ctx.connected) return
-      const available = await refreshCapabilities(true)
-      if (!available.problem) await sweeper.run()
+      if (await runtime.latch.ensureReady(true)) await runtime.sweeper.run()
     },
 
     dispose() {
-      stopped = true
-      capabilityGeneration += 1
-      capabilityFlight = null
-      sweeper.dispose()
-      queries.reset()
-      machines.clear()
-      config.dispose()
+      runtime.dispose()
     }
   }
 }
